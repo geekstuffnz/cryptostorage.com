@@ -23,7 +23,7 @@
  */
 
 /**
- * Maintains a single public/private key pair.
+ * Maintains a single public/private keypair.
  * 
  * @param plugin is a plugin for a specific cryptocurrency
  * @param state specifies the initial private key or state (optional)
@@ -68,7 +68,7 @@ function CryptoKey(plugin, state) {
 	}
 	
 	/**
-	 * Sets the address of this key pair.
+	 * Sets the address of this keypair.
 	 * 
 	 * Can only set the address if unencrypted private key is unknown or override is true.
 	 * 
@@ -116,6 +116,10 @@ function CryptoKey(plugin, state) {
 	this.getEncryptionScheme = function() {
 		if (!that.hasPrivateKey()) throw new Error("Cannot check encryption scheme if private key is unknown");
 		return this.state.encryption;
+	}
+	
+	this.toString = function() {
+		return JSON.stringify(state);
 	}
 	
 	// initialize

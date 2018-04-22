@@ -1,48 +1,54 @@
 # Introduction
-CryptoStorage is an open-source tool to generate offline storage for multiple cryptocurrencies.  This tool generates [key pairs](https://cryptostorage.com/#faq_key_pair) in your device's browser which can store cryptocurrency without exposing private keys to an internet-connected device.  Generated key pairs can be easily printed and saved to digital files for long-term storage.
+CryptoStorage is an open source tool to generate offline storage for multiple cryptocurrencies.  This tool generates [key pairs](https://cryptostorage.com/#faq_key_pair) in your device's browser which can store cryptocurrency without exposing private keys to an internet-connected device.  Generated key pairs can be easily printed and saved to digital files for long-term storage.
 
 This tool is security-focused.  Funds are never entrusted to a third party.  Private keys can be passphrase-protected and [split into pieces](https://cryptostorage.com/#faq_split_keys) which can be geographically separated so funds are not accessible at any one location.  Recommendations are automatically provided to improve the security of the tool's environment.
 
 # Main Features
 - Generate offline storage for multiple cryptocurrencies.
 - Keys are generated only in your device's browser so funds are never entrusted to a third party.
-- 100% open-source, client-side, and free to use.  No account necessary.
+- 100% open source, client-side, and free to use.  No account necessary.
 - Private keys can be passphrase-protected using [CryptoJS](https://github.com/brix/crypto-js).  Also supports [BIP38](https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki) for Bitcoin and Bitcoin Cash.
 - Storage can be split into pieces which can be geographically separated so funds are not accessible at any one location.
-- Print or save to digital files for long-term storage.
+- Print or save to digital files (json, csv, and txt) for long-term storage.
+- Print and cut out "crypto-cash" to easily tip people in real life.
 - Recommendations are automatically provided to improve the security of the tool's environment:
 	- Checks if the internet connection is active
 	- Checks if the tool is downloaded and running locally
-	- Checks if the browser is open-source
-	- Checks if the operating system is open-source
+	- Checks if the browser is open source
+	- Checks if the operating system is open source
 	
-# Supported Tokens
+# Supported Storage
 - Bitcoin
 - Bitcoin Cash
 - Ethereum
 - Monero
 - Litecoin
+- Neo
 - Dash
 - Zcash
+- Waves
+- Stellar
+- Ripple
 - Ethereum Classic
 - Basic Attention Token
 - OmiseGo
 - Ubiq
+- BIP39
 
-# ⚠ First Release
-This is the first release of this software.  It should not be trusted with signficant amounts until it is reviewed by the community.
+# ⚠ Beta Release
+This software is in beta.  It should not be used with signficant amounts until it is reviewed by the community.
 
 # Using this Tool as Securely as Possible
 
 Security is a spectrum.  The following procedure is recommended to use this tool as securely as possible:
 
-1. [Download and verify cryptostorage.com-*[version]*.zip.](#download-and-verify-the-source-code)
+1. [Download and verify the source code.](#download-and-verify-the-source-code)
 2. Transfer cryptostorage.com-*[version]*.zip to a secure computer using a flash drive.
     - The computer should be disconnected from the internet and ideally will never connect to the internet again.
-    - An open-source operating system is recommended like [Tails](https://tails.boum.org), [Debian](https://www.debian.org/), or [Raspbian for the Raspberry Pi](https://www.raspberrypi.org).
+    - An open source operating system is recommended like [Tails](https://tails.boum.org), [Debian](https://www.debian.org/), or [Raspbian for the Raspberry Pi](https://www.raspberrypi.org).
 3. Unzip cryptostorage.com-*[version]*.zip.
 4. Open index.html in the unzipped folder in a browser.
-    - An open-source browser is recommended like [Firefox](https://www.mozilla.org/en-US/firefox/) or [Chromium](https://www.chromium.org/getting-involved/download-chromium).
+    - An open source browser is recommended like [Firefox](https://www.mozilla.org/en-US/firefox/) or [Chromium](https://www.chromium.org/getting-involved/download-chromium).
 5. Confirm that all environment checks pass.
     1. Go to Generate New Keys from the homepage.
     2. The notice bar at the top should indicate that all security checks pass.
@@ -99,19 +105,19 @@ For bug reports and feature requests, please submit an issue to https://github.c
 
 For community discussion, please join the conversation on Reddit at https://reddit.com/r/cryptostorage.
 
-For email support, please email support@cryptostorage.com.  Emails are answered on a best-effort basis only.
+For email support, please email [support@cryptostorage.com](mailto:support@cryptostorage.com).  Email is answered on a best-effort basis only.
 
 *No one can recover lost keys or passwords for you. Do not lose these or your funds will be lost.*
 
-# Contributing
-Anyone may develop and submit pull requests to improve this project.
+# Contribute
+All contributions are welcome to make this project better.
 
-All contributions are welcome.
+Please note cryptostorage.com will retain ownership of donation addresses for supported coins.
 
 # License
 This project is [MIT](https://github.com/cryptostorage/cryptostorage.com/blob/master/LICENSE.txt) licensed.
 
 # Donate
-Donations can be voluntarily given to support this project.
+Donations are gratefully accepted to support this project.
 
-See https://cryptostorage.com/#donate for donation addresses.  Thank you!
+Please see https://cryptostorage.com/#donate for donation addresses.

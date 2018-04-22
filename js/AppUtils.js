@@ -40,11 +40,12 @@ var OperatingSystems = {
 var AppUtils = {
 		
 	// app constants
-	VERSION: "0.1.1",
+	VERSION: "0.2.3",
 	VERSION_POSTFIX: " beta",
 	RUN_MIN_TESTS: true,
 	RUN_FULL_TESTS: false,
-	DEV_MODE: true,
+	DEV_MODE: false,
+	DEV_MODE_PASSPHRASE: "abctesting123",
 	DELETE_WINDOW_CRYPTO: false,
 	VERIFY_ENCRYPTION: false,
 	ENCRYPTION_THREADS: 1,
@@ -57,7 +58,16 @@ var AppUtils = {
 	NO_INTERNET_CAN_BE_ERROR: false,	// lack of internet can be critical error if running remotely
 	SIMULATED_LOAD_TIME: null,				// simulate slow load times in ms, disabled if null
 	IGNORE_HASH_CHANGE: false,				// specifies that the browser should ignore hash changes
+	NA: "Not applicable",							// "not applicable" constant
+	MAX_SHARES: 127,									// maximum number of split shares
+	SPLIT_V1_VERSION: 1,							// split encoding config version
 	
+	// encryption v1 constants
+	ENCRYPTION_V1_PBKDF_ITER: 10000,
+	ENCRYPTION_V1_KEY_SIZE: 256,
+	ENCRYPTION_V1_BLOCK_SIZE: 16,
+	ENCRYPTION_V1_VERSION: 1,
+
 	/**
 	 * Mock environment checks.
 	 */
@@ -151,34 +161,31 @@ var AppUtils = {
 		return dependencies;
 	},
 	
-	getExportJs: function() {
+	getInitialExportDependencies: function() {
 		return [
 			"lib/jquery-3.2.1.js",
 			"lib/async.js",
 			"lib/loadjs.js",
+			"lib/tippy.all.js",
 			"js/DependencyLoader.js",
 			"js/GenUtils.js",
 			"js/AppUtils.js",
 			"js/DivControllers.js",
 			"js/CryptoPlugins.js",
 			"js/BodyExporter.js",
-			"lib/pagination.js"
+			"lib/pagination.js",
+			"css/style.css",
+			"css/pagination.css",
 		];
 	},
-	
-	getExportCss: function() {
-		return [
-			"css/style.css",
-			"css/pagination.css"
-		]
-	},
 
-	getExportDependencies: function() {
+	getDynamicExportDependencies: function() {
 		var dependencies = [
 			"css/pagination.css",
 			"lib/pagination.js",
 			"js/PieceRenderer.js",
 			"lib/qrcode.js",
+			"lib/jquery-csv.js",
 			"lib/jszip.js",
 			"lib/FileSaver.js",
 			"lib/crypto-js.js",
@@ -233,22 +240,25 @@ var AppUtils = {
 			"img/loading.gif",
 			"img/information.png",
 			"img/trash.png",
+			"img/caution_solid.png",
 			"img/qr_code.png",
 			"img/split_lines_2.png",
 			"img/split_lines_3.png",
 			"img/file.png",
 			"img/files.png",
-			"img/warning.png",
+			"img/caution.png",
 			"img/checkmark.png",
 			"img/drag_and_drop.png",
 			"img/bitpay.png",
-			"img/ethereumjs.png"
+			"img/ethereumjs.png",
+			"img/share.png",
+			"img/information_white.png"
 		];
 		
 		// add dependencies
 		dependencies = dependencies.concat(AppUtils.getCryptoDependencies());
 		dependencies = dependencies.concat(AppUtils.getNoticeDependencies());
-		dependencies = dependencies.concat(AppUtils.getExportDependencies());
+		dependencies = dependencies.concat(AppUtils.getDynamicExportDependencies());
 		
 		// return unique array
 		return toUniqueArray(dependencies);
@@ -265,11 +275,16 @@ var AppUtils = {
 			AppUtils.plugins.push(new MoneroPlugin());
 			AppUtils.plugins.push(new BitcoinPlugin());
 			AppUtils.plugins.push(new LitecoinPlugin());
-			AppUtils.plugins.push(new OmiseGoPlugin());
+			AppUtils.plugins.push(new NeoPlugin());
 			AppUtils.plugins.push(new DashPlugin());
 			AppUtils.plugins.push(new ZcashPlugin());
-			AppUtils.plugins.push(new BasicAttentionTokenPlugin());
+			AppUtils.plugins.push(new WavesPlugin());
+			AppUtils.plugins.push(new StellarPlugin());
+			AppUtils.plugins.push(new RipplePlugin());
 			AppUtils.plugins.push(new EthereumClassicPlugin());
+			AppUtils.plugins.push(new OmiseGoPlugin());
+			AppUtils.plugins.push(new BasicAttentionTokenPlugin());
+			AppUtils.plugins.push(new BIP39Plugin());
 			AppUtils.plugins.push(new UbiqPlugin());
 		}
 		return AppUtils.plugins;
@@ -293,33 +308,170 @@ var AppUtils = {
 	 */
 	EncryptionScheme: {
 		BIP38: "BIP38",
-		CRYPTOJS: "CryptoJS",
-		SJCL: "SJCL"
+		V0_CRYPTOJS: "V0_CRYPTOJS",
+		V1_CRYPTOJS: "V1_CRYPTOJS",
 	},
 	
 	/**
-	 * Determines if the given string is a valid CryptoJS WIF private key.
-	 */
-	isWifCryptoJs: function(str) {
-		return str.startsWith("U2") && (str.length === 128 || str.length === 108) && !hasWhitespace(str);
-	},
-	
-	/**
-	 * Determines if the given string is base58.
-	 */
-	isBase58: function(str) {
-		return /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/.test(str)
-	},
-	
-	/**
-	 * Determines if the given string is a possible split piece of a private key (cannot be excluded as one).
+	 * Determines if the given string is an encrypted private key.
 	 * 
-	 * A piece must be at least 47 characters and base58 encoded.
-	 * 
-	 * @returns true if the given string meets the minimum requirements to be a split piece
+	 * @param str is the string to test
+	 * @returns true if the string is an encrypted private key, false otherwise
 	 */
-	isPossibleSplitPiece: function(str) {
-		return isString(str) && str.length >= 47 && AppUtils.isBase58(str) && isNumber(AppUtils.getMinPieces(str));
+	isEncryptedKey: function(str) {
+		return AppUtils.decodeEncryptedKey(str) !== null;
+	},
+	
+	/**
+	 * Decodes the given encrypted private key.
+	 * 
+	 * @param str is the encrypted private key to decode
+	 * @returns Object with hex, wif, and encryption fields or null if not recognized
+	 */
+	decodeEncryptedKey: function(str) {
+		var decoded = null;
+		if ((decoded = decodeEncryptedHexV0(str)) !== null) return decoded;
+		if ((decoded = decodeEncryptedWifV0(str)) !== null) return decoded;
+		if ((decoded = decodeEncryptedHexV1(str)) !== null) return decoded;
+		if ((decoded = decodeEncryptedWifV1(str)) !== null) return decoded;
+		return null;
+		
+		function decodeEncryptedHexV0(str) {
+			
+			// determine if encrypted hex V0
+			if (!isHex(str)) return null;
+			if (str.length % 32 !== 0) return null;
+			var b64 = CryptoJS.enc.Hex.parse(str).toString(CryptoJS.enc.Base64).toString(CryptoJS.enc.Utf8);
+			if (!b64.startsWith("U2")) return null;
+
+			// decode
+			var state = {};
+			state.hex = str;
+			state.wif = b64;
+			state.encryption = AppUtils.EncryptionScheme.V0_CRYPTOJS;
+			return state;
+		}
+		
+		function decodeEncryptedWifV0(str) {
+			if (!str.startsWith("U2")) return null;
+			if (!isBase64(str)) return null;
+			var hex = CryptoJS.enc.Base64.parse(str).toString(CryptoJS.enc.Hex);
+			return decodeEncryptedHexV0(hex);
+		}
+		
+		function decodeEncryptedHexV1(str) {
+			
+			// determine if encrypted hex V1
+			if (!isHex(str)) return null;
+			if (str.length - 32 < 1 || str.length % 32 !== 0) return null;
+			var version = parseInt(str.substring(0, AppUtils.ENCRYPTION_V1_VERSION.toString(16).length), 16);
+			if (version !== AppUtils.ENCRYPTION_V1_VERSION) return null;
+			
+			// decode
+			var state = {};
+			state.hex = str;
+			state.wif = Bitcoin.Base58.encode(Crypto.util.hexToBytes(str));
+			state.encryption = AppUtils.EncryptionScheme.V1_CRYPTOJS;
+			return state;
+		}
+		
+		function decodeEncryptedWifV1(str) {
+			if (!isBase58(str)) return null;
+			var hex = Crypto.util.bytesToHex(Bitcoin.Base58.decode(str));
+			return decodeEncryptedHexV1(hex);
+		}
+	},
+	
+	/**
+	 * Encodes the given share with the given minimum pieces threshold.
+	 * 
+	 * @param share is the share hex to encode
+	 * @param minPieces is the minimum threshold to combine shares
+	 * @returns wif encoded share
+	 */
+	encodeShare: function(share, minPieces) {
+		assertTrue(isHex(share));
+		assertTrue(isNumber(minPieces) && minPieces <= AppUtils.MAX_SHARES);
+		return encodeShareV1(share, minPieces);
+		
+		function encodeShareV0(share, minPieces) {
+			try {
+				return minPieces + 'c' + Bitcoin.Base58.encode(ninja.wallets.splitwallet.hexToBytes(share));
+			} catch (err) {
+				return null;
+			}
+		}
+		
+		function encodeShareV1(share, minPieces) {
+			var hex = padLeft(AppUtils.SPLIT_V1_VERSION.toString(16), 2) + padLeft(minPieces.toString(16), 2) + padLeft(share, 2);
+			return Bitcoin.Base58.encode(Crypto.util.hexToBytes(hex));
+			
+			// Pads a string `str` with zeros on the left so that its length is a multiple of `bits` (credit: bitaddress.org)
+			function padLeft(str, bits){
+				bits = bits || config.bits
+				var missing = str.length % bits;
+				return (missing ? new Array(bits - missing + 1).join('0') : '') + str;
+			}
+		}
+	},
+	
+	/**
+	 * Decodes the given encoded share.
+	 * 
+	 * @param share is the wif encoded share to decode
+	 * @returns Object with minPieces and hex fields or null if cannot decode
+	 */
+	decodeShare: function(encodedShare) {
+		if (!isString(encodedShare)) return null;
+		var decoded;
+		if ((decoded = decodeShareV0(encodedShare))) return decoded;
+		if ((decoded = decodeShareV1(encodedShare))) return decoded;
+		return null;
+		
+		function decodeShareV0(encodedShare) {
+			try {
+				if (encodedShare.length < 34) return null;
+				var decoded = {};
+				decoded.minPieces = getMinPiecesV0(encodedShare);
+				if (!decoded.minPieces) return null;
+				var wif = encodedShare.substring(encodedShare.indexOf('c') + 1);
+				if (!isBase58(wif)) return null;
+				decoded.hex = ninja.wallets.splitwallet.stripLeadZeros(Crypto.util.bytesToHex(Bitcoin.Base58.decode(wif)));
+				return decoded;
+			} catch (err) {
+				return null;
+			}
+			
+			/**
+			 * Determines the minimum pieces to reconstitute based on a possible split piece string.
+			 * 
+			 * Looks for 'XXXc' prefix in the given split piece where XXX is the minimum to reconstitute.
+			 * 
+			 * @param splitPiece is a string which may be prefixed with 'XXXc...'
+			 * @return the minimum pieces to reconstitute if prefixed, null otherwise
+			 */
+			function getMinPiecesV0(splitPiece) {
+				var idx = splitPiece.indexOf('c');	// look for first lowercase 'c'
+				if (idx <= 0) return null;
+				var minPieces = Number(splitPiece.substring(0, idx));	// parse preceding numbers to int
+				if (!isNumber(minPieces) || minPieces < 2 || minPieces > AppUtils.MAX_SHARES) return null;
+				return minPieces;
+			}
+		}
+		
+		function decodeShareV1(encodedShare) {
+			if (encodedShare.length < 33) return null;
+			if (!isBase58(encodedShare)) return null;
+			var hex = Crypto.util.bytesToHex(Bitcoin.Base58.decode(encodedShare));
+			if (hex.length % 2 !== 0) return null;
+			var version = parseInt(hex.substring(0, 2), 16);
+			if (version !== AppUtils.SPLIT_V1_VERSION) return null;
+			var decoded = {};
+			decoded.minPieces = parseInt(hex.substring(2, 4), 16);
+			if (!isNumber(decoded.minPieces) || decoded.minPieces < 2 || decoded.minPieces > AppUtils.MAX_SHARES) return null;
+			decoded.hex = ninja.wallets.splitwallet.stripLeadZeros(hex.substring(4));
+			return decoded;
+		}
 	},
 	
 	/**
@@ -345,33 +497,6 @@ var AppUtils = {
 		}
 		assertTrue(nums[0] + nums[1] + nums[2] > 0, "Version does not have positive element: " + str);
 		return nums;
-	},
-	
-	/**
-	 * Determines the minimum pieces to reconstitute based on a possible split piece string.
-	 * 
-	 * Looks for 'XXXc' prefix in the given split piece where XXX is the minimum to reconstitute.
-	 * 
-	 * @param splitPiece is a string which may be prefixed with 'XXXc...'
-	 * @return the minimum pieces to reconstitute if prefixed, null otherwise
-	 */
-	getMinPieces: function(splitPiece) {
-		assertString(splitPiece);
-		var idx = splitPiece.indexOf('c');	// look for first lowercase 'c'
-		if (idx <= 0) return null;
-		return Number(splitPiece.substring(0, idx)); // parse preceding numbers to int
-	},
-
-	/**
-	 * Splits the given string.  First converts the string to hex.
-	 * 
-	 * @param str is the string to split
-	 * @param numPieces is the number of pieces to make
-	 * @param minPieces is the minimum number of pieces to reconstitute
-	 * @returns string[] are the pieces
-	 */
-	splitString: function(str, numPieces, minPieces) {
-		return secrets.share(secrets.str2hex(str), numPieces, minPieces);
 	},
 
 	/**
@@ -452,11 +577,83 @@ var AppUtils = {
 			}
 		}
 	},
+	
+	/**
+	 * Parses a piece from text.
+	 * 
+	 * @param text is the text to parse into a piece
+	 * @param plugin is the plugin to parse keys if text is not json or csv
+	 * @returns the piece parsed from text or null if no piece can be parsed
+	 * @throws exception if given empty string or plugin not provided and not csv or json
+	 */
+	parsePieceFromText: function(text, plugin) {
+		
+		// validate non-empty string
+		assertTrue(isString(text));
+		assertFalse(text.trim() === "");
+		
+		// try to parse json
+		try { return AppUtils.jsonToPiece(text); }
+		catch (err) { }
+		
+		// try to parse csv
+		try { return AppUtils.csvToPiece(text); }
+		catch (err) {}
+		
+		// otherwise must have plugin
+		if (!plugin) throw new Error("Plugin required to parse keys");
+		
+		// get lines
+		var lines = getLines(text);
+		for (var i = 0; i < lines.length; i++) lines[i] = lines[i].trim();
+		lines.removeVal("");
+		
+		// get keys or shares
+		var keys = [];
+		var shares = [];
+		var minPieces;
+		for (var i = 0; i < lines.length; i++) {
+			try {
+				var key = plugin.newKey(lines[i]);
+				keys.push(key);
+			} catch (err) {
+				var share = AppUtils.decodeShare(lines[i]);
+				if (!share) return null;
+				if (!minPieces) minPieces = share.minPieces;
+				else if (minPieces !== share.minPieces) return null;
+				shares.push(lines[i]);
+			}
+		}
+		
+		// convert keys or shares to piece
+		if (keys.length === lines.length) {
+			return AppUtils.keysToPieces(keys)[0];
+		} else if (shares.length === lines.length) {
+			return getPieceFromWifs(plugin, shares);
+		} else {
+			return null;
+		}
+		
+		function getPieceFromWifs(plugin, wifs) {
+			var piece = {};
+			piece.version = AppUtils.VERSION;
+			piece.keys = [];
+			for (var i = 0; i < wifs.length; i++) {
+				var key = {};
+				key.wif = wifs[i];
+				key.ticker = plugin.getTicker();
+				piece.keys.push(key);
+			}
+			return piece;
+		}
+	},
 
 	/**
 	 * Attempts to construct a key from the given string.  The string is expected to be a
 	 * single private key (hex or wif, encrypted or unencrypted) or one or more pieces that
 	 * reconstitute a single private key (hex or wif, encrypted or unencrypted).
+	 * 
+	 * TODO: only used in tests
 	 * 
 	 * @param plugin in the coin plugin used to parse the string
 	 * @param str is the string to parse into a key
@@ -474,7 +671,7 @@ var AppUtils = {
 		} catch (err) {
 
 			// try tokenizing and combining
-			var tokens = getTokens(str);
+			var tokens = getWhitespaceTokens(str);
 			if (tokens.length === 0) return null;
 			try {
 				return plugin.combine(tokens);
@@ -486,6 +683,8 @@ var AppUtils = {
 	
 	/**
 	 * Attempts to get a key from the given strings.
+	 * 
+	 * TODO: unused
 	 * 
 	 * @param plugin is the currency plugin to parse the strings to a key
 	 * @param strings is expected to be a private key or pieces
@@ -556,7 +755,7 @@ var AppUtils = {
 				pieceKey.ticker = key.getPlugin().getTicker();
 				pieceKey.address = key.getAddress();
 				pieceKey.wif = keyPieces[j];
-				if (pieceKey.wif) pieceKey.encryption = key.getEncryptionScheme();
+				if (pieceKey.wif && numPieces === 1) pieceKey.encryption = key.getEncryptionScheme();
 				pieces[j].keys.push(pieceKey);
 			}
 		}
@@ -577,20 +776,27 @@ var AppUtils = {
 		// handle one piece
 		if (pieces.length === 1) {
 			assertTrue(pieces[0].keys.length > 0);
-			if (pieces[0].pieceNum && pieces[0].keys[0].wif) {
-				var minPieces = AppUtils.getMinPieces(pieces[0].keys[0].wif);
-				var additional = minPieces - 1;
-				throw new Error("Need " + additional + " additional " + (additional === 1 ? "piece" : "pieces") + " to import private keys");
-			}
+			
+			// get keys from piece
 			for (var i = 0; i < pieces[0].keys.length; i++) {
 				var pieceKey = pieces[0].keys[i];
 				var state = {};
 				state.address = pieceKey.address;
 				state.wif = pieceKey.wif;
 				state.encryption = pieceKey.encryption;
-				var key = new CryptoKey(AppUtils.getCryptoPlugin(pieceKey.ticker), state.wif ? state.wif : state);
-				if (key.hasPrivateKey() && key.isEncrypted() && pieceKey.address) key.setAddress(pieceKey.address);	// set address because it cannot be derived from encrypted key
-				keys.push(key);
+				try {
+					var key = new CryptoKey(AppUtils.getCryptoPlugin(pieceKey.ticker), state.wif ? state.wif : state);
+					if (key.hasPrivateKey() && key.isEncrypted() && pieceKey.address) key.setAddress(pieceKey.address);	// set address because it cannot be derived from encrypted key
+					keys.push(key);
+				} catch (err) {
+				
+					// additional pieces are needed
+					var share = AppUtils.decodeShare(pieces[0].keys[0].wif);
+					assertInitialized(share, "piece.keys[" + i + "] is neither a key nor a share");
+					var minPieces = share.minPieces;
+					var additional = minPieces - 1;
+					throw new Error("Need " + additional + " additional " + (additional === 1 ? "piece" : "pieces") + " to import private keys");
+				}
 			}
 		}
 		
@@ -620,8 +826,10 @@ var AppUtils = {
 					if (!encryption) encryption = piece.keys[i].encryption;
 					else if (encryption !== piece.keys[i].encryption) throw new Error("Pieces have different encryption states");
 					if (pieces[j].keys[i].wif) {
-						if (!minPieces) minPieces = AppUtils.getMinPieces(piece.keys[i].wif);
-						else if (minPieces !== AppUtils.getMinPieces(piece.keys[i].wif)) throw new Error("Pieces have different minimum threshold prefixes");
+						var decoded = AppUtils.decodeShare(piece.keys[i].wif);
+						var decodedMin = decoded ? decoded.minPieces : null;
+						if (!minPieces) minPieces = decodedMin;
+						else if (minPieces !== decodedMin) throw new Error("Pieces have different minimum thresholds");
 					}
 				}
 			}
@@ -649,36 +857,76 @@ var AppUtils = {
 					}
 				}
 			} catch (err) {
+				console.log(err);
 				throw new Error("Could not import private keys from the given pieces.  Verify the pieces are correct.");
 			}
 		}
 
 		return keys;
 	},
-
+	
 	/**
-	 * Zips the given pieces.
+	 * Creates a zip with the given pieces.
 	 * 
 	 * @param pieces are the pieces to zip
-	 * @param callback(blob) is invoked when zipping is complete
+	 * @param zipType specifies the file contents of the zip: json | csv | txt
+	 * @param onDone(blob) is called when zipping is complete
 	 */
-	piecesToZip: function(pieces, callback) {
+	piecesToZip: function(pieces, zipType, callback) {
 		assertTrue(pieces.length > 0, "Pieces cannot be empty");
 		
 		// get common ticker
 		var ticker = AppUtils.getCommonTicker(pieces[0]).toLowerCase();
 		
+		// get extension and transform function
+		var extension;
+		var transformFunc;
+		if (zipType === "json") {
+			extension = ".json";
+			transformFunc = AppUtils.pieceToJson;
+		} else if (zipType === "csv") {
+			extension = ".csv";
+			transformFunc = AppUtils.pieceToCsv;
+		} else if (zipType === "txt") {
+			extension = ".txt";
+			transformFunc = AppUtils.pieceToTxt;
+		} else throw new Error("Invalid zip type: " + zipType);
+		
+		// build names for pieces
+		var pieceNames = [];
+		for (var i = 0; i < pieces.length; i++) {
+			var name = "cryptostorage_" + ticker + (pieces[i].pieceNum ? "_piece_" + pieces[i].pieceNum : "");
+			pieceNames.push(getNextAvailableName(pieceNames, name));
+		}
+
 		// prepare zip
 		var zip = JSZip();
 		for (var i = 0; i < pieces.length; i++) {
-			var name = "cryptostorage_" + ticker + (pieces.length > 1 ? "_piece_" + (i + 1) : "");
-			zip.file(name + ".json", AppUtils.pieceToJson(pieces[i]));
+			var name = pieceNames[i];
+			zip.file(name + extension, transformFunc(pieces[i]));
 		}
 		
 		// create zip
 		zip.generateAsync({type:"blob"}).then(function(blob) {
 			callback(blob);
 		});
+		
+		/**
+		 * Gets the next available name, adding a postfix to prevent duplicates.
+		 * 
+		 * @param names is the list of existing names
+		 * @param name is the desired name to add
+		 * @returns a name which will be postfixed if necessary to prevent duplicates
+		 */
+		function getNextAvailableName(names, name) {
+			if (!arrayContains(names, name)) return name;
+			var idx = 2;
+			while (true) {
+				var postfixedName = name + "_" + idx;
+				if (!arrayContains(names, postfixedName)) return postfixedName;
+				idx++;
+			}
+		}
 	},
 
 	/**
@@ -696,7 +944,7 @@ var AppUtils = {
 			var funcs = [];
 			zip.forEach(function(path, zipObject) {
 				if (path.startsWith("_")) return;
-				if (path.endsWith(".json")) {
+				if (path.endsWith(".json") || path.endsWith(".csv")) {
 					funcs.push(getPieceCallbackFunction(zipObject));
 				} else if (path.endsWith(".zip")) {
 					funcs.push(getZipCallbackFunction(zipObject));
@@ -722,13 +970,35 @@ var AppUtils = {
 			return function(onPiece) {
 				zipObject.async("string").then(function(str) {
 					var piece;
-					try {
-						piece = JSON.parse(str);
-						AppUtils.validatePiece(piece, true);
-					} catch (err) {
-						//throw err;
-						console.log(err);
+					
+					// handle json
+					if (zipObject.name.endsWith(".json")) {
+						try {
+							piece = JSON.parse(str);
+							AppUtils.validatePiece(piece, true);
+						} catch (err) {
+							//throw err;
+							console.log(err);
+						}
 					}
+					
+					// handle csv
+					else if (zipObject.name.endsWith(".csv")) {
+						try {
+							piece = AppUtils.csvToPiece(str);
+							AppUtils.validatePiece(piece, true);
+						} catch (err) {
+							//throw err;
+							console.log(err);
+						}
+					}
+					
+					// unexpected extension
+					else {
+						throw new Error("Unexpected path extension: " + path);
+					}
+					
+					// callback
 					onPiece(null, {name: zipObject.name, piece: piece});
 				});
 			}
@@ -744,7 +1014,23 @@ var AppUtils = {
 			}
 		}
 	},
+	
+	/**
+	 * Converts a piece to a json-formatted string.
+	 * 
+	 * @param piece is the piece to convert
+	 * @returns a json-formatted string
+	 */
+	pieceToJson: function(piece) {
+		return JSON.stringify(piece);
+	},
 
+	/**
+	 * Converts a piece to a csv-formatted string.
+	 * 
+	 * @param piece is the piece to convert
+	 * @returns a csv-formatted string
+	 */
 	pieceToCsv: function(piece) {
 		assertTrue(piece.keys.length > 0);
 		
@@ -755,6 +1041,7 @@ var AppUtils = {
 	    	csvHeader.push(prop.toString().toUpperCase());
 	    }
 		}
+		if (piece.pieceNum) csvHeader.push("PIECE_NUM");
 		
 		// build csv
 		var csvArr = [];
@@ -763,8 +1050,9 @@ var AppUtils = {
 			var key = piece.keys[i];
 			var csvKey = [];
 			for (var prop in key) {
-				csvKey.push(isInitialized(key[prop]) ? key[prop] : "");
+				csvKey.push(isInitialized(key[prop]) ? key[prop] : "NULL");
 			}
+			if (piece.pieceNum) csvKey.push(piece.pieceNum ? piece.pieceNum : "NULL");
 			csvArr.push(csvKey);
 		}
 	
@@ -772,8 +1060,76 @@ var AppUtils = {
 		return arrToCsv(csvArr);
 	},
 	
-	pieceToJson: function(piece, config) {
-		return JSON.stringify(piece);
+	pieceToTxt: function(piece) {
+		var str = "";
+		for (var i = 0; i < piece.keys.length; i++) {
+			str += "===== #" + (i + 1) + " " + AppUtils.getCryptoPlugin(piece.keys[i].ticker).getName() + " =====\n\n";
+			if (piece.keys[i].address) str += "Public Address:\n" + piece.keys[i].address + "\n\n";
+			if (piece.keys[i].wif) str += "Private Key " + (piece.pieceNum ? "(split)" : (piece.keys[i].encryption ? "(encrypted)" : "(unencrypted)")) + ":\n" + piece.keys[i].wif + "\n\n";
+		}
+		return str.trim();
+	},
+	
+	pieceToAddresses: function(piece) {
+		var str = "";
+		for (var i = 0; i < piece.keys.length; i++) {
+			str += "===== #" + (i + 1) + " " + AppUtils.getCryptoPlugin(piece.keys[i].ticker).getName() + " =====\n\n";
+			if (piece.keys[i].address) str += "Public Address:\n" + piece.keys[i].address + (piece.keys[i].address !== AppUtils.NA ? "\n" + piece.keys[i].address : "") + "\n\n";
+		}
+		return str.trim();
+	},
+	
+	/**
+	 * Converts a json-formatted string to a piece.
+	 * 
+	 * @param json is the json-formatted string to convert
+	 * @returns the piece converted from the json, throws and error if not valid json piece
+	 */
+	jsonToPiece: function(json) {
+		var piece = JSON.parse(json);
+		AppUtils.validatePiece(piece, true);
+		return piece;
+	},
+	
+	/**
+	 * Converts a csv-formatted string to a piece.
+	 * 
+	 * @param csv is the csv-formatted string to convert
+	 * @returns the piece converted from the csv, throws an error if not valid csv piece
+	 */
+	csvToPiece: function(csv) {
+		
+		// convert csv to array
+		var arr = csvToArr(csv);
+		
+		// build piece from array
+		var piece = {};
+		piece.version = AppUtils.VERSION;
+		piece.keys = [];
+		var pieceNumCol = arr[0].indexOf("PIECE_NUM");
+		for (var row = 1; row < arr.length; row++) {
+			
+			// collect piece num and validate across rows
+			if (pieceNumCol >= 0) {
+				var pieceNum = arr[row][pieceNumCol].toLowerCase();
+				pieceNum = pieceNum === "null" ? null : parseInt(pieceNum);
+				if (!isDefined(piece.pieceNum)) piece.pieceNum = pieceNum;
+				else if (piece.pieceNum !== pieceNum) throw new Error("Piece num at row " + (row + 1) + " does not match previous piece nums");
+			}
+			
+			// collect pieces
+			var key = {};
+			piece.keys.push(key);
+			for (var col = 0; col < arr[0].length; col++) {
+				var val = arr[row][col];
+				val = val.toLowerCase() === "null" ? null : val;
+				key[arr[0][col].toLowerCase()] = val;
+			}
+		}
+		
+		// validate and return piece
+		AppUtils.validatePiece(piece, true);
+		return piece;
 	},
 	
 	/**
@@ -791,7 +1147,10 @@ var AppUtils = {
 		for (var i = 0; i < copy.keys.length; i++) {
 			var key = copy.keys[i];
 			if (!config.showPublic) delete key.address;
-			if (!config.showPrivate) delete key.wif;
+			if (!config.showPrivate) {
+				delete key.wif;
+				delete key.encryption;
+			}
 		}
 		return copy;
 		
@@ -802,24 +1161,14 @@ var AppUtils = {
 			}
 		}
 	},
-
-	pieceToStr: function(piece) {
-		var str = "";
-		for (var i = 0; i < piece.keys.length; i++) {
-			str += "===== #" + (i + 1) + " " + AppUtils.getCryptoPlugin(piece.keys[i].ticker).getName() + " =====\n\n";
-			if (piece.keys[i].address) str += "Public Address:\n" + piece.keys[i].address + "\n\n";
-			if (piece.keys[i].wif) str += "Private Key " + (piece.pieceNum ? "(split)" : (piece.keys[i].encryption ? "(encrypted)" : "(unencrypted)")) + ":\n" + piece.keys[i].wif + "\n\n";
-		}
-		return str.trim();
-	},
 	
-	pieceToAddresses: function(piece) {
-		var str = "";
-		for (var i = 0; i < piece.keys.length; i++) {
-			str += "===== #" + (i + 1) + " " + AppUtils.getCryptoPlugin(piece.keys[i].ticker).getName() + " =====\n\n";
-			if (piece.keys[i].address) str += "Public Address:\n" + piece.keys[i].address + "\n" + piece.keys[i].address + "\n\n";
+	isValidPiece: function(piece, allowMissingPublicXorPrivate) {
+		try {
+			validatePiece(piece, allowMissingPublicXorPrivate);
+			return true;
+		} catch (err) {
+			return false;
 		}
-		return str.trim();
 	},
 
 	/**
@@ -831,7 +1180,10 @@ var AppUtils = {
 	 */
 	validatePiece: function(piece, allowMissingPublicXorPrivate) {
 		assertDefined(piece.version, "piece.version is not defined");
-		if (piece.version === "1.0") piece.version = "0.0.1";	// hack for backwards compatibility of pieces that already exist
+		
+		// upgrade legacy piece version for backward compatibility
+		if (piece.version === "1.0") piece.version = "0.0.1";
+		
 		try {
 			AppUtils.getVersionNumbers(piece.version);
 		} catch (err) {
@@ -848,7 +1200,26 @@ var AppUtils = {
 		var minPieces;
 		for (var i = 0; i < piece.keys.length; i++) {
 			assertDefined(piece.keys[i].ticker, "piece.keys[" + i + "].ticker is not defined");
-			assertDefined(piece.keys[i].encryption, "piece.keys[" + i + "].encryption is not defined");
+			
+			// upgrade legacy encryption label for backward compatibility
+			for (var j = 0; j < piece.keys.length; j++) {
+				if (piece.keys[j].encryption === "CryptoJS") piece.keys[j].encryption = AppUtils.EncryptionScheme.V0_CRYPTOJS;
+			}
+			
+			// validate encryption scheme
+			if (isInitialized(piece.keys[i].encryption)) {
+				var found = false;
+				for (var j = 0; j < Object.keys(AppUtils.EncryptionScheme).length; j++) {
+					var key = Object.keys(AppUtils.EncryptionScheme)[j];
+					var val = AppUtils.EncryptionScheme[key];
+					if (val === piece.keys[i].encryption) {
+						found = true;
+						break;
+					}
+				}
+				if (!found) throw new Error("piece.keys[" + i + "].encryption is unrecognized: " + piece.keys[i].encryption);
+			}
+			
 			if (allowMissingPublicXorPrivate) {
 				if (!isDefined(piece.keys[i].address) && !isDefined(piece.keys[i].wif)) throw new Error("piece.keys[" + i + "] is missing an address and private key");
 			} else {
@@ -856,8 +1227,10 @@ var AppUtils = {
 				assertDefined(piece.keys[i].wif, "piece.keys[" + i + "].wif is not defined");
 			}
 			if (piece.pieceNum && piece.keys[i].wif) {
-				if (!minPieces) minPieces = AppUtils.getMinPieces(piece.keys[i].wif);
-				else if (minPieces !== AppUtils.getMinPieces(piece.keys[i].wif)) throw new Error("piece.keys[" + i + "].wif has a different minimum threshold prefix");
+				var decoded = AppUtils.decodeShare(piece.keys[i].wif);
+				var decodedMin = decoded ? decoded.minPieces : null;
+				if (!minPieces) minPieces = decodedMin;
+				else if (minPieces !== decodedMin) throw new Error("piece.keys[" + i + "].wif has a different minimum threshold prefix");
 			}
 		}
 	},
@@ -900,7 +1273,8 @@ var AppUtils = {
 	 * 		numPieces: _,
 	 * 		minPieces: _,
 	 * 		verifyEnryption: true|false	
-	 * 		passphrase: _,	// only needed if currency encryption initialized
+	 * 		passphrase: _,		// only needed if currency encryption initialized
+	 *    renderConfig: {}	// piece render config  TODO: rendering should probably not be a part of this function
 	 * 	}
 	 * @param onProgress(percent, label) is invoked as progress is made (optional)
 	 * @param onDone(err, keys, pieces, pieceDivs) is invoked when done
@@ -919,10 +1293,11 @@ var AppUtils = {
 				assertDefined(config.currencies[i].encryption);
 				if (isInitialized(config.currencies[i].encryption)) encryptionInitialized = true;
 			}
-			assertInitialized(config.numPieces);
+			if (!config.numPieces) config.numPieces = 1;
 			if (encryptionInitialized) assertInitialized(config.passphrase);
 		} catch (err) {
 			onDone(err);
+			return;
 		}
 		
 		// track done and total weight for progress
@@ -940,7 +1315,13 @@ var AppUtils = {
 		}
 		dependencies = toUniqueArray(dependencies);
 		if (onProgress) onProgress(0, "Loading dependencies");
-		LOADER.load(dependencies, function() {
+		LOADER.load(dependencies, function(err) {
+			
+			// check for error
+			if (err) {
+				onDone(err);
+				return;
+			}
 			
 			// internet is no longer required if accessing remotely
 			if (noInternetIsNotErrorAfterDependenciesLoaded) AppUtils.setNoInternetCanBeError(false);
@@ -957,49 +1338,54 @@ var AppUtils = {
 			// generate keys
 			if (onProgress) onProgress(doneWeight / totalWeight, "Generating keys");
 			async.series(funcs, function(err, keys) {
-				try {
 					
-					// check for error
-					if (err) throw err;
-					
-					// collect encryption schemes
-					var encryptionSchemes = [];
-					for (var i = 0; i < config.currencies.length; i++) {
-						var currency = config.currencies[i];
-						for (var j = 0; j < currency.numKeys; j++) {
-							if (currency.encryption) encryptionSchemes.push(currency.encryption);
-						}
-					}
-					
-					// encrypt keys
-					if (encryptionSchemes.length > 0) {
-						assertEquals(keys.length, encryptionSchemes.length);
-						
-						// compute encryption + verification weight
-						var encryptWeight = 0;
-						for (var i = 0; i < encryptionSchemes.length; i++) {
-							encryptWeight += AppUtils.getWeightEncryptKey(encryptionSchemes[i]) + (config.verifyEncryption ? AppUtils.getWeightDecryptKey(encryptionSchemes[i]) : 0);
-						}
-						
-						// start encryption
-						if (onProgress) onProgress(doneWeight / totalWeight, "Encrypting");
-						AppUtils.encryptKeys(keys, encryptionSchemes, config.passphrase, config.verifyEncryption, function(percent, label) {
-							if (onProgress) onProgress((doneWeight + percent * encryptWeight) / totalWeight, label);
-						}, function(err, encryptedKeys) {
-							if (err) onDone(err);
-							else {
-								doneWeight += encryptWeight;
-								generatePieces(encryptedKeys, config);
-							}
-						});
-					}
-					
-					// no encryption
-					else {
-						generatePieces(keys, config);
-					}
-				} catch (err) {
+				// check for error
+				if (err) {
 					onDone(err);
+					return;
+				}
+				
+				// collect keys and schemes to encrypt
+				var keysToEncrypt = [];
+				var encryptionSchemes = [];
+				var keyIdx = 0;
+				for (var i = 0; i < config.currencies.length; i++) {
+					for (var j = 0; j < config.currencies[i].numKeys; j++) {
+						if (config.currencies[i].encryption) {
+							keysToEncrypt.push(keys[keyIdx]);
+							encryptionSchemes.push(config.currencies[i].encryption);
+						}
+						keyIdx++;
+					}
+				}
+									
+				// encrypt keys
+				if (keysToEncrypt.length > 0) {
+					assertEquals(keysToEncrypt.length, encryptionSchemes.length);
+					
+					// compute encryption + verification weight
+					var encryptWeight = 0;
+					for (var i = 0; i < encryptionSchemes.length; i++) {
+						encryptWeight += AppUtils.getWeightEncryptKey(encryptionSchemes[i]) + (config.verifyEncryption ? AppUtils.getWeightDecryptKey(encryptionSchemes[i]) : 0);
+					}
+					
+					// start encryption
+					if (onProgress) onProgress(doneWeight / totalWeight, "Encrypting");
+					AppUtils.encryptKeys(keysToEncrypt, encryptionSchemes, config.passphrase, config.verifyEncryption, function(percent, label) {
+						if (onProgress) onProgress((doneWeight + percent * encryptWeight) / totalWeight, label);
+					}, function(err, encryptedKeys) {
+						if (err) {
+							onDone(err);
+						} else {
+							doneWeight += encryptWeight;
+							generatePieces(keys, config);
+						}
+					});
+				}
+				
+				// no encryption
+				else {
+					generatePieces(keys, config);
 				}
 			});
 		});
@@ -1007,10 +1393,12 @@ var AppUtils = {
 		function newKeyFunc(plugin, onDone) {
 			return function(onDone) {
 				setImmediate(function() {	// let UI breath
+					var key;
 					try {
-						var key = plugin.newKey();
+						key = plugin.newKey();
 					} catch(err) {
 						onDone(err);
+						return;
 					}
 					doneWeight += AppUtils.getWeightCreateKey();
 					if (onProgress) onProgress(doneWeight / totalWeight, "Generating keys");
@@ -1020,36 +1408,30 @@ var AppUtils = {
 		}
 		
 		function generatePieces(keys, config) {
-			try {
 				
-				// convert keys to pieces
-				var pieces = AppUtils.keysToPieces(keys, config.numPieces, config.minPieces);
-				
-				// verify pieces recreate keys
-				var keysFromPieces = AppUtils.piecesToKeys(pieces);
-				assertEquals(keys.length, keysFromPieces.length);
-				for (var i = 0; i < keys.length; i++) {
-					assertTrue(keys[i].equals(keysFromPieces[i]));
-				}
-				
-				// render pieces to divs
-				var renderWeight = PieceRenderer.getWeight(keys.length, config.numPieces, null);
-				if (onProgress) onProgress(doneWeight / totalWeight, "Rendering");
-				new PieceRenderer(pieces, null, null).render(function(percent) {
-					if (onProgress) onProgress((doneWeight + percent * renderWeight) / totalWeight, "Rendering");
-				}, function(err, pieceDivs) {
-					try {
-						if (err) throw err;
-						assertEquals(pieces.length, pieceDivs.length);
-						if (onProgress) onProgress(1, "Complete");
-						onDone(null, keys, pieces, pieceDivs);
-					} catch (err) {
-						onDone(err);
-					}
-				});
-			} catch (err) {
-				onDone(err);
+			// convert keys to pieces
+			var pieces = AppUtils.keysToPieces(keys, config.numPieces, config.minPieces);
+			
+			// verify pieces recreate keys
+			var keysFromPieces = AppUtils.piecesToKeys(pieces);
+			assertEquals(keys.length, keysFromPieces.length);
+			for (var i = 0; i < keys.length; i++) {
+				assertTrue(keys[i].equals(keysFromPieces[i]));
 			}
+			
+			// render pieces to divs
+			var renderWeight = PieceRenderer.getWeight(keys.length, config.numPieces, null);
+			if (onProgress) onProgress(doneWeight / totalWeight, "Rendering");
+			new PieceRenderer(pieces, null, config.renderConfig).render(function(percent) {
+				if (onProgress) onProgress((doneWeight + percent * renderWeight) / totalWeight, "Rendering");
+			}, function(err, pieceDivs) {
+				if (err) onDone(err);
+				else if (pieces.length !== pieceDivs.length) onDone(new Error("pieces.length !== pieceDivs.length"));
+				else {
+					if (onProgress) onProgress(1, "Complete");
+					onDone(null, keys, pieces, pieceDivs);
+				}
+			});
 		}
 	},
 	
@@ -1062,7 +1444,7 @@ var AppUtils = {
 	 * @param scheme is the scheme to encrypt the key
 	 * @param passphrase is the passphrase to encrypt with
 	 * @param onProgress(percent) is invoked as progress as made (optional)
-	 * @param onDone(err, encryptedKey) is invoked when done (optional)
+	 * @param onDone(err, encryptedKey) is invoked when done
 	 */
 	encryptKey: function(key, scheme, passphrase, onProgress, onDone) {
 		
@@ -1071,42 +1453,191 @@ var AppUtils = {
 			if (!scheme) throw new Error("Scheme must be initialized");
 			if (!isObject(key, CryptoKey)) throw new Error("Given key must be of class 'CryptoKey' but was " + cryptoKey);
 			if (!passphrase) throw new Error("Passphrase must be initialized");
+			assertInitialized(onDone);
 		} catch (err) {
 			if (onDone) onDone(err);
+			return;
 		}
 		
-		// handle encryption scheme
-		switch (scheme) {
-			case AppUtils.EncryptionScheme.CRYPTOJS:
+		// encrypt key according to scheme
+		var encryptFunc;
+		if (scheme === AppUtils.EncryptionScheme.V0_CRYPTOJS) encryptFunc = encryptKeyV0;
+		else if (scheme === AppUtils.EncryptionScheme.V1_CRYPTOJS) encryptFunc = encryptKeyV1;
+		else if (scheme === AppUtils.EncryptionScheme.BIP38) encryptFunc = encryptKeyBip38;
+		else {
+			onDone(new Error("Encryption scheme '" + scheme + "' not supported"));
+			return;
+		}
+		encryptFunc(key, scheme, passphrase, onProgress, onDone);
+		
+		function encryptKeyV1(key, scheme, passphrase, onProgress, onDone) {
+			try {
+				
+				// create random salt and replace first two characters with version
+				var salt = CryptoJS.lib.WordArray.random(AppUtils.ENCRYPTION_V1_BLOCK_SIZE);
+				var hexVersion = AppUtils.ENCRYPTION_V1_VERSION.toString(16);
+				salt = hexVersion + salt.toString().substring(hexVersion.length);
+				salt = CryptoJS.enc.Hex.parse(salt);
+				
+				// strengthen passphrase with passphrase key
+				var passphraseKey = CryptoJS.PBKDF2(passphrase, salt, {
+		      keySize: AppUtils.ENCRYPTION_V1_KEY_SIZE / 32,
+		      iterations: AppUtils.ENCRYPTION_V1_PBKDF_ITER,
+		      hasher: CryptoJS.algo.SHA512
+		    });
+				
+				// encrypt
+				var iv = salt;
+				var encrypted = CryptoJS.AES.encrypt(key.getHex(), passphraseKey, { 
+			    iv: iv, 
+			    padding: CryptoJS.pad.Pkcs7,
+			    mode: CryptoJS.mode.CBC
+			  });
+				
+				// encrypted hex = salt + hex cipher text
+				var ctHex = CryptoJS.enc.Base64.parse(encrypted.toString()).toString(CryptoJS.enc.Hex);
+				var encryptedHex = salt.toString() + ctHex;
+				key.setState(Object.assign(key.getPlugin().newKey(encryptedHex).getState(), {address: key.getAddress()}));
+				if (onProgress) onProgress(1);
+				if (onDone) onDone(null, key);
+			} catch (err) {
+				onDone(err);
+			}
+		}
+		
+		function encryptKeyV0(key, scheme, passphrase, onProgress, onDone) {
+			try {
+				var b64 = CryptoJS.AES.encrypt(key.getHex(), passphrase).toString();
+				key.setState(Object.assign(key.getPlugin().newKey(b64).getState(), {address: key.getAddress()}));
+				if (onProgress) onProgress(1);
+				if (onDone) onDone(null, key);
+			} catch (err) {
+				if (onDone) onDone(err);
+			}
+		}
+		
+		function encryptKeyBip38(key, scheme, passphrase, onProgress, onDone) {
+			try {
+				var decoded = bitcoinjs.decode(key.getWif());
+				bitcoinjs.encrypt(decoded.privateKey, true, passphrase, function(progress) {
+					if (onProgress) onProgress(progress.percent / 100);
+				}, null, function(err, encryptedWif) {
+					try {
+						if (err) throw err;
+						key.setState(Object.assign(key.getPlugin().newKey(encryptedWif).getState(), {address: key.getAddress()}));
+						if (onDone) onDone(null, key);
+					} catch (err) {
+						if (onDone) onDone(err);
+					}
+				});
+			} catch (err) {
+				if (onDone) onDone(err);
+			}
+		}
+	},
+	
+	/**
+	 * Decrypts the given key with the given passphrase.
+	 * 
+	 * Requires bitcoin.js and crypto-js.js.
+	 * 
+	 * @param key is the key to decrypt
+	 * @param passphrase is the passphrase to decrypt the key
+	 * @param onProgress(percent) is invoked as progress is made (optional)
+	 * @param onDone(err, decryptedKey) is invoked when done
+	 */
+	decryptKey: function(key, passphrase, onProgress, onDone) {
+		
+		// validate input
+		try {
+			if (!isObject(key, CryptoKey)) throw new Error("Given key must be of class 'CryptoKey' but was " + cryptoKey);
+			if (!passphrase) throw new Error("Passphrase must be initialized");
+			assertTrue(key.isEncrypted());
+			assertInitialized(onDone)
+		} catch (err) {
+			if (onDone) onDone(err);
+			return;
+		}
+		
+		// decrypt key according to scheme
+		var decryptFunc;
+		var scheme = key.getEncryptionScheme();
+		if (scheme === AppUtils.EncryptionScheme.V0_CRYPTOJS) decryptFunc = decryptKeyV0;
+		else if (scheme === AppUtils.EncryptionScheme.V1_CRYPTOJS) decryptFunc = decryptKeyV1;
+		else if (scheme === AppUtils.EncryptionScheme.BIP38) decryptFunc = decryptKeyBip38;
+		else {
+			onDone(new Error("Encryption scheme '" + scheme + "' not supported"));
+			return;
+		}
+		decryptFunc(key, scheme, passphrase, onProgress, onDone);
+		
+		function decryptKeyV1(key, scheme, passphrase, onProgress, onDone) {
+			try {
+				
+				// assert correct version
+				assertEquals(AppUtils.ENCRYPTION_V1_VERSION, parseInt(key.getHex().substring(0, AppUtils.ENCRYPTION_V1_VERSION.toString(16).length), 16));
+				
+				// get passphrase key
+				var salt = CryptoJS.enc.Hex.parse(key.getHex().substr(0, 32));
+			  var passphraseKey = CryptoJS.PBKDF2(passphrase, salt, {
+			  	keySize: AppUtils.ENCRYPTION_V1_KEY_SIZE / 32,
+			  	iterations: AppUtils.ENCRYPTION_V1_PBKDF_ITER,
+			  	hasher: CryptoJS.algo.SHA512
+			  });
+			  
+			  // decrypt
+			  var iv = salt;
+			  var ctHex = key.getHex().substring(32);
+			  var ctB64 = CryptoJS.enc.Hex.parse(ctHex).toString(CryptoJS.enc.Base64);
+			  var decrypted = CryptoJS.AES.decrypt(ctB64, passphraseKey, {
+			  	iv: iv, 
+			    padding: CryptoJS.pad.Pkcs7,
+			    mode: CryptoJS.mode.CBC
+			  });
+			  var decryptedHex = decrypted.toString(CryptoJS.enc.Utf8);
+			  assertInitialized(decryptedHex);
+			  
+			  // update key
+			  key.setPrivateKey(decryptedHex);
+				if (onProgress) onProgress(1)
+				if (onDone) onDone(null, key);
+			} catch (err) {
+				onDone(new Error("Incorrect passphrase"));
+			}
+		}
+		
+		function decryptKeyV0(key, scheme, passphrase, onProgress, onDone) {
+			try {
+				var hex;
 				try {
-					var b64 = CryptoJS.AES.encrypt(key.getHex(), passphrase).toString();
-					key.setState(Object.assign(key.getPlugin().newKey(b64).getState(), {address: key.getAddress()}));
-					if (onProgress) onProgress(1);
+					hex = CryptoJS.AES.decrypt(key.getWif(), passphrase).toString(CryptoJS.enc.Utf8);
+				} catch (err) { }
+				if (!hex) throw new Error("Incorrect passphrase");
+				try {
+					key.setPrivateKey(hex);
+					if (onProgress) onProgress(1)
+					if (onDone) onDone(null, key);
+				} catch (err) {
+					throw new Error("Incorrect passphrase");
+				}
+			} catch (err) {
+				if (onDone) onDone(err);
+			}
+		}
+		
+		function decryptKeyBip38(key, scheme, passphrase, onProgress, onDone) {
+			bitcoinjs.decrypt(key.getWif(), passphrase, function(progress) {
+				if (onProgress) onProgress(progress.percent / 100);
+			}, null, function(err, decrypted) {
+				try {
+					if (err) throw new Error("Incorrect passphrase");
+					var privateKey = bitcoinjs.encode(0x80, decrypted.privateKey, true);
+					key.setPrivateKey(privateKey);
 					if (onDone) onDone(null, key);
 				} catch (err) {
 					if (onDone) onDone(err);
 				}
-				break;
-			case AppUtils.EncryptionScheme.BIP38:
-				try {
-					var decoded = bitcoinjs.decode(key.getWif());
-					bitcoinjs.encrypt(decoded.privateKey, true, passphrase, function(progress) {
-						if (onProgress) onProgress(progress.percent / 100);
-					}, null, function(err, encryptedWif) {
-						try {
-							if (err) throw err;
-							key.setState(Object.assign(key.getPlugin().newKey(encryptedWif).getState(), {address: key.getAddress()}));
-							if (onDone) onDone(null, key);
-						} catch (err) {
-							if (onDone) onDone(err);
-						}
-					});
-				} catch (err) {
-					if (onDone) onDone(err);
-				}
-				break;
-			default:
-				if (onDone) onDone(new Error("Encryption scheme '" + scheme + "' not supported"));
+			});
 		}
 	},
 	
@@ -1220,66 +1751,6 @@ var AppUtils = {
 	},
 	
 	/**
-	 * Decrypts the given key with the given passphrase.
-	 * 
-	 * Requires bitcoin.js and crypto-js.js.
-	 * 
-	 * @param key is the key to decrypt
-	 * @param passphrase is the passphrase to decrypt the key
-	 * @param onProgress(percent) is invoked as progress is made (optional)
-	 * @param onDone(err, decryptedKey) is invoked when done (optional)
-	 */
-	decryptKey: function(key, passphrase, onProgress, onDone) {
-		
-		// validate input
-		try {
-			if (!isObject(key, CryptoKey)) throw new Error("Given key must be of class 'CryptoKey' but was " + cryptoKey);
-			if (!passphrase) throw new Error("Passphrase must be initialized");
-			assertTrue(key.isEncrypted());
-		} catch (err) {
-			if (onDone) onDone(err);
-		}
-		
-		// handle encryption scheme
-		switch (key.getEncryptionScheme()) {
-			case AppUtils.EncryptionScheme.CRYPTOJS:
-				try {
-					var hex;
-					try {
-						hex = CryptoJS.AES.decrypt(key.getWif(), passphrase).toString(CryptoJS.enc.Utf8);
-					} catch (err) { }
-					if (!hex) throw new Error("Incorrect passphrase");
-					try {
-						key.setPrivateKey(hex);
-						if (onProgress) onProgress(1)
-						if (onDone) onDone(null, key);
-					} catch (err) {
-						throw new Error("Incorrect passphrase");
-					}
-				} catch (err) {
-					if (onDone) onDone(err);
-				}
-				break;
-			case AppUtils.EncryptionScheme.BIP38:
-				bitcoinjs.decrypt(key.getWif(), passphrase, function(progress) {
-					if (onProgress) onProgress(progress.percent / 100);
-				}, null, function(err, decrypted) {
-					try {
-						if (err) throw new Error("Incorrect passphrase");
-						var privateKey = bitcoinjs.encode(0x80, decrypted.privateKey, true);
-						key.setPrivateKey(privateKey);
-						if (onDone) onDone(null, key);
-					} catch (err) {
-						if (onDone) onDone(err);
-					}
-				});
-				break;
-			default:
-				if (onDone) onDone(new Error("Encryption scheme '" + key.getEncryptionScheme() + "' not supported"));
-		}
-	},
-	
-	/**
 	 * Decrypts the given keys.
 	 * 
 	 * @param keys are the encrypted keys to decrypt
@@ -1367,8 +1838,10 @@ var AppUtils = {
 		switch (scheme) {
 			case AppUtils.EncryptionScheme.BIP38:
 				return 4187;
-			case AppUtils.EncryptionScheme.CRYPTOJS:
+			case AppUtils.EncryptionScheme.V0_CRYPTOJS:
 				return 10;
+			case AppUtils.EncryptionScheme.V1_CRYPTOJS:
+				return 540;
 			default: throw new Error("Unrecognized encryption scheme: " + scheme);
 		}
 	},
@@ -1399,8 +1872,10 @@ var AppUtils = {
 		switch (scheme) {
 			case AppUtils.EncryptionScheme.BIP38:
 				return 4581;
-			case AppUtils.EncryptionScheme.CRYPTOJS:
+			case AppUtils.EncryptionScheme.V0_CRYPTOJS:
 				return 100;
+			case AppUtils.EncryptionScheme.V1_CRYPTOJS:
+				return 540;
 			default: throw new Error("Unrecognized encryption scheme: " + scheme);
 		}
 	},
@@ -1466,7 +1941,7 @@ var AppUtils = {
 			return false;
 		}
 		
-		// determines if browser is open-source
+		// determines if browser is open source
 		function isOpenSourceBrowser(browserName) {
 			if (arrayContains(AppUtils.OPEN_SOURCE_BROWSERS, browserName)) return true;
 			if (arrayContains(AppUtils.CLOSED_SOURCE_BROWSERS, browserName)) return false;
@@ -1546,6 +2021,7 @@ var AppUtils = {
 		info.isLocal = AppUtils.isLocal();
 		info.runtimeError = AppUtils.RUNTIME_ERROR;
 		info.dependencyError = AppUtils.DEPENDENCY_ERROR;
+		info.tabError = AppUtils.TAB_ERROR;
 		if (AppUtils.MOCK_ENVIRONMENT_ENABLED) info = Object.assign(info, AppUtils.MOCK_ENVIRONMENT);	// merge mock environment
 		info.checks = AppUtils.getEnvironmentChecks(info);
 		return info;
@@ -1598,6 +2074,9 @@ var AppUtils = {
 		// check if dependency error
 		if (info.dependencyError) checks.push({state: "fail", code: AppUtils.EnvironmentCode.INTERNET});
 		
+		// check if tab error
+		if (info.tabError) checks.push({state: "fail", code: AppUtils.EnvironmentCode.BROWSER});
+		
 		// check if remote and not online
 		var internetRequiredError = false;
 		if (isInitialized(info.isOnline)) {
@@ -1619,13 +2098,13 @@ var AppUtils = {
 			else checks.push({state: "warn", code: AppUtils.EnvironmentCode.IS_LOCAL});
 		}
 		
-		// check open-source browser
+		// check open source browser
 		if (info.browser && info.browser.isSupported) {
 			if (info.browser.isOpenSource) checks.push({state: "pass", code: AppUtils.EnvironmentCode.BROWSER});
 			else checks.push({state: "warn", code: AppUtils.EnvironmentCode.BROWSER});
 		}
 		
-		// check open-source os
+		// check open source os
 		if (isInitialized(info.os)) {
 			if (info.os.isOpenSource) checks.push({state: "pass", code: AppUtils.EnvironmentCode.OPERATING_SYSTEM});
 			else checks.push({state: "warn", code: AppUtils.EnvironmentCode.OPERATING_SYSTEM});
@@ -1742,6 +2221,17 @@ var AppUtils = {
 		AppUtils.notifyEnvironmentListeners(AppUtils.environment);
 	},
 	
+	/**
+	 * Sets an error if a new tab cannot be opened.
+	 */
+	setTabError: function(bool) {
+		if (!AppUtils.environment) AppUtils.environment = {};
+		AppUtils.TAB_ERROR = bool;
+		AppUtils.environment.tabError = bool;
+		AppUtils.environment.checks = AppUtils.getEnvironmentChecks(AppUtils.environment);
+		AppUtils.notifyEnvironmentListeners(AppUtils.environment);
+	},
+	
 		/**
 	 * Sets if lack of internet can be a critical error if the site is running remotely.
 	 * 
@@ -1756,7 +2246,7 @@ var AppUtils = {
 	},
 	
 	/**
-	 * Runs minimum tests to verify key generation, encryption, and splitting.
+	 * Runs minimum tests to sanity check key generation, encryption, and splitting.
 	 * 
 	 * @param onDone(err) is invoked when done
 	 */
@@ -1764,28 +2254,25 @@ var AppUtils = {
 		
 		// build key generation configuration
 		var config = {};
-		config.passphraseEnabled = true;
 		config.passphrase = Tests.PASSPHRASE;
-		config.splitEnabled = true;
 		config.numPieces = 3;
 		config.minPieces = 2;
-		config.verifyEncryption = true;
+		config.verifyEncryption = false;
 		config.currencies = [];
-		var plugins = AppUtils.getCryptoPlugins();
 		config.currencies.push({
 			ticker: AppUtils.getCryptoPlugin("BTC").getTicker(),
 			numKeys: 1,
-			encryption: AppUtils.EncryptionScheme.CRYPTOJS
+			encryption: null
 		});
 		config.currencies.push({
 			ticker: AppUtils.getCryptoPlugin("XMR").getTicker(),
 			numKeys: 1,
-			encryption: AppUtils.EncryptionScheme.CRYPTOJS
+			encryption: AppUtils.EncryptionScheme.V0_CRYPTOJS	// just makes sure cryptojs is in place
 		});
 		config.currencies.push({
 			ticker: AppUtils.getCryptoPlugin("ETH").getTicker(),
 			numKeys: 1,
-			encryption: AppUtils.EncryptionScheme.CRYPTOJS
+			encryption: null
 		});
 		
 		// generate keys and test

@@ -130,6 +130,26 @@ function isObject(arg, obj) {
 }
 
 /**
+ * Determines if all alphabet characters in the given string are upper case.
+ * 
+ * @param str is the string to test
+ * @returns true if the string is upper case, false otherwise
+ */
+function isUpperCase(str) {
+	return str.toUpperCase() === str;
+}
+
+/**
+ * Determines if all alphabet characters in the given string are lower case.
+ * 
+ * @param str is the string to test
+ * @param true if the string is lower case, false otherwise
+ */
+function isLowerCase(str) {
+	return str.toLowerCase() === str;
+}
+
+/**
  * Indicates if the given argument is a hexidemal string.
  * 
  * Credit: https://github.com/roryrjb/is-hex/blob/master/is-hex.js.
@@ -140,7 +160,39 @@ function isObject(arg, obj) {
 var HEX_REG_EXP = /([0-9]|[a-f])/gim
 function isHex(arg) {
 	if (typeof arg !== 'string') return false;
+	assertTrue(arg.length > 0, "Cannot determine if empty string is hex");
 	return (arg.match(HEX_REG_EXP) || []).length === arg.length;
+}
+
+/**
+ * Determines if the given string is base32.
+ */
+function isBase32(str) {
+	if (typeof str !== 'string') return false;
+	assertTrue(str.length > 0, "Cannot determine if empty string is base32");
+	return /^[ABCDEFGHIJKLMNOPQRSTUVWXYZ234567]+$/.test(str);
+}
+
+/**
+ * Determines if the given string is base58.
+ */
+function isBase58(str) {
+	if (typeof str !== 'string') return false;
+	assertTrue(str.length > 0, "Cannot determine if empty string is base58");
+	return /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/.test(str);
+}
+
+/**
+ * Determines if the given string is base64.
+ */
+function isBase64(str) {
+	if (typeof str !== 'string') return false;
+	assertTrue(str.length > 0, "Cannot determine if empty string is base64");
+	try {
+		return btoa(atob(str)) == str;
+	} catch (err) {
+		return false;
+	}
 }
 
 /**
@@ -428,7 +480,7 @@ function listify(arrOrElem) {
 function arrayContains(arr, obj) {
 	assertTrue(isArray(arr));
 	for (var i = 0; i < arr.length; i++) {
-		if (arr[i] === obj) return true;
+		if (equals(arr[i], obj)) return true;
 	}
 	return false;
 }
@@ -461,7 +513,7 @@ function arraysEqual(arr1, arr2) {
 	if (!isArray(arr2)) throw new Error("Second argument is not an array");
 	if (arr1.length != arr2.length) return false;
 	for (var i = 0; i < arr1.length; ++i) {
-		if (arr1[i] !== arr2[i]) return false;
+		if (!equals(arr1[i], arr2[i])) return false;
 	}
 	return true;
 }
@@ -667,7 +719,7 @@ function countNonWhitespaceCharacters(str) {
  * @param str is the string to get tokens from
  * @returns string[] are the tokens separated by whitespace within the string
  */
-function getTokens(str) {
+function getWhitespaceTokens(str) {
 	return str.match(/\S+/g);
 }
 
@@ -714,24 +766,21 @@ function getInternalStyleSheetText() {
  * 
  * @param div is the div to embed within the document's body (optional)
  * @param title is the title of the tab (optional)
- * @param jsPaths are paths to javascript files (optional)
- * @param cssPaths are paths to css files (optional)
+ * @param dependencyPaths are js, css, or img to import (optional)
  * @param internalCss are css rules to embed within the document's style (optional)
  * @returns str is the document string
  */
-function buildHtmlDocument(div, title, jsPaths, cssPaths, internalCss) {
+function buildHtmlDocument(div, title, dependencyPaths, internalCss) {
 	var str = "<!DOCTYPE HTML>";
 	str += "<html><head>" + (title ? "<title>" + title + "</title>" : "") + (internalCss ? "<style>" + internalCss + "</style>" : "");
-	if (jsPaths) {
-		jsPaths = listify(jsPaths);
-		for (var i = 0; i < jsPaths.length; i++) {
-			str += "<script src='" + jsPaths[i] + "'></script>";
-		}
-	}
-	if (cssPaths) {
-		cssPaths = listify(cssPaths);
-		for (var i = 0; i < cssPaths.length; i++) {
-			str += "<link rel='stylesheet' type='text/css' href='" + cssPaths[i] + "'/>";
+	if (dependencyPaths) {
+		dependencyPaths = listify(dependencyPaths);
+		for (var i = 0; i < dependencyPaths.length; i++) {
+			var dependencyPath = dependencyPaths[i];
+			if (dependencyPath.endsWith(".js")) str += "<script src='" + dependencyPath + "'></script>";
+			else if (dependencyPath.endsWith(".css")) str += "<link rel='stylesheet' type='text/css' href='" + dependencyPath + "'/>";
+			else if (dependencyPath.endsWith(".png") || dependencyPath.endsWith(".img"))  str += "<img src='" + dependencyPath + "'>";
+			else throw new Error("Unrecognized dependency path extension: " + dependencyPath);			
 		}
 	}
 	str += "</head><body>";
@@ -745,19 +794,30 @@ function buildHtmlDocument(div, title, jsPaths, cssPaths, internalCss) {
  * 
  * @param div is the jquery div to render to (optional)
  * @param title is the title of the new tab (optional)
- * @param jsPaths are javascript paths to import (optional)
- * @param cssPaths are css paths to import (optional)
+ * @param dependencyPaths are js, css, or img paths to import (optional)
  * @param internalCss is css to embed in the html document (optional)
- * @param onLoad is invoked with a reference to the window when available
+ * @param onLoad(err, window) is invoked with a reference to the window when available
  */
-function newWindow(div, title, jsPaths, cssPaths, internalCss, onLoad) {
+function newWindow(div, title, dependencyPaths, internalCss, onLoad) {
+	var onLoadCalled = false;
 	var w = window.open();
+	if (!isInitialized(w) || !isInitialized(w.document)) {
+		onLoadOnce(new Error("Could not get window reference"));
+		return;
+	}
 	w.opener = null;
-	w.document.write(buildHtmlDocument(div, title, jsPaths, cssPaths, internalCss));
+	w.document.write(buildHtmlDocument(div, title, dependencyPaths, internalCss));
 	w.addEventListener('load', function() {
-		if (onLoad) onLoad(w);
+		onLoadOnce(null, w);
 	});
 	w.document.close();
+	
+	// prevents onLoad() from being called multiple times
+	function onLoadOnce(err, window) {
+		if (onLoadCalled) return;
+		onLoadCalled = true;
+		if (onLoad) onLoad(err, window);
+	}
 }
 
 /**
@@ -836,6 +896,16 @@ function isJsonFile(file) {
 }
 
 /**
+ * Determines if the given file is a csv file.
+ * 
+ * @param file is a file
+ * @returns true if the given file is a csv file, false otherwise
+ */
+function isCsvFile(file) {
+	return file.name.endsWith(".csv") || file.type === 'text/csv';
+}
+
+/**
  * Fetches the given list of images.
  * 
  * Prerequisite: async.js.
@@ -909,4 +979,16 @@ function initPolyfills() {
 	    configurable: true
 	  });
 	}
+}
+
+/**
+ * Generates a v4 UUID.
+ * 
+ * Source: https://stackoverflow.com/questions/105034/create-guid-uuid-in-javascript
+ */
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }

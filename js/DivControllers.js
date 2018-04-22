@@ -71,7 +71,7 @@ var UiUtils = {
 	 * 				config.showRegenerate specifies if the regenerate button should be shown
 	 * 				config.showNotices specifies if notices should be shown
 	 */
-	openStorage: function(browserTabName, config) {
+	openStorageTab: function(browserTabName, config) {
 		
 		// deep copy config
 		config = Object.assign({}, config);
@@ -80,7 +80,15 @@ var UiUtils = {
 		if (!isInitialized(config.showNotices)) config.showNotices = true;
 		
 		// open tab
-		newWindow(null, browserTabName, AppUtils.getExportJs(), AppUtils.getExportCss(), getInternalStyleSheetText(), function(window) {
+		newWindow(null, browserTabName, AppUtils.getInitialExportDependencies(), getInternalStyleSheetText(), function(err, window) {
+			
+			// check for error
+			if (err) {
+				AppUtils.setTabError(true);
+				return;
+			}
+			
+			// initialize tab
 			config.environmentInfo = AppUtils.getCachedEnvironment();
 		  window.exportToBody(window, config);
 			window.focus();
@@ -93,7 +101,7 @@ var UiUtils = {
 	TAILS_LINK: "<a target='_blank' href='https://tails.boum.org'>Tails</a>",
 	DEBIAN_LINK: " <a target='_blank' href='https://www.debian.org/'>Debian</a>",
 	RASPBIAN_LINK: "<a target='_blank' href='https://www.raspberrypi.org'>Raspbian for the Raspberry Pi</a>",
-	INFO_TOOLTIP_MAX_WIDTH: "600px",
+	INFO_TOOLTIP_MAX_WIDTH: "700px",
 	NOTICE_TOOLTIP_MAX_WIDTH: "700px"
 }
 
@@ -130,11 +138,14 @@ function AppController(div) {
 	
 	/**
 	 * Navigates to the page/position identified by the given hash.
+	 * 
+	 * @param hash identifies the page within the application
+	 * @param onDone() is invoked when done
 	 */
 	function navigate(hash, onDone) {
-		if (!hash) hash = "#home";
+		if (hash === lastHash) return;
 		lastHash = hash;
-		window.location.hash = hash;
+		if (hash) window.location.hash = hash;
 		if (hash.startsWith("#faq")) that.showFaq(onDone);
 		else if (hash === "#donate") that.showDonate(onDone);
 		else if (hash === "#import") that.showImport(onDone);
@@ -202,7 +213,6 @@ function AppController(div) {
 		
 		// navigate on browser navigation
 		$(window).on('popstate', function(e) {
-			if (window.location.hash === lastHash) return;
 			navigate(window.location.hash);
 		});
 		
@@ -323,10 +333,10 @@ function IntroController(div, onSelectGenerate, onSelectImport) {
 			
 			// intro slider
 			sliderDiv = $("<div class='slider_div'>").appendTo(div);
-			getSlide($(mixImg), "Create offline storage for multiple cryptocurrencies.").appendTo(sliderDiv);
-			getSlide($("<img src='img/printer.png'>"), "Print paper wallets for long-term storage.").appendTo(sliderDiv);
+			getSlide($(mixImg), "Generate offline wallets for major cryptocurrencies.").appendTo(sliderDiv);
+			getSlide($("<img src='img/printer.png'>"), "Print paper wallets or save keys to a file for long-term storage.").appendTo(sliderDiv);
 			getSlide($("<img src='img/security.png'>"), "Runs only in your browser so funds are never entrusted to a third party.").appendTo(sliderDiv);
-			getSlide($("<img src='img/microscope.png'>"), "100% open-source and free to use.  No account necessary.").appendTo(sliderDiv);
+			getSlide($("<img src='img/microscope.png'>"), "100% open source and free to use.  No account necessary.").appendTo(sliderDiv);
 			getSlide($("<img src='img/keys.png'>"), "Passphrase-protect and split private keys for maximum security.").appendTo(sliderDiv);
 			getSlide($("<img src='img/checklist.png'>"), "Generate keys securely with automatic environment checks.").appendTo(sliderDiv);
 			
@@ -372,7 +382,7 @@ inheritsFrom(IntroController, DivController);
  */
 function HomeController(div) {
 	DivController.call(this, div);
-	var moreLink = false;
+	var moreLink = true;
 	this.render = function(onDone) {
 		
 		// load home dependencies
@@ -389,13 +399,14 @@ function HomeController(div) {
 			var pageDiv = $("<div class='page_div home_div flex_vertical'>").appendTo(div);
 			
 			// supported currencies
+			var numVisible = 15;
 			pageDiv.append($("<div class='home_label'>Supports these tokens</div>"));
 			var plugins = AppUtils.getCryptoPlugins();
 			pageDiv.append(getCurrencyRow(plugins.slice(0, 3), true, onCurrencyClicked));
 			var moreDiv = null;
 			for (var i = 3; i < plugins.length; i += 4) {
 				var row = getCurrencyRow(plugins.slice(i, i + 4), false, onCurrencyClicked);
-				if (i >= 7 && !moreDiv) {
+				if (i >= numVisible && !moreDiv) {
 					moreDiv = $("<div>").appendTo(pageDiv);
 					moreDiv.hide();
 				}
@@ -404,7 +415,7 @@ function HomeController(div) {
 			}
 			if (moreDiv) {
 				var moreLabel = $("<div class='home_more_label'>").appendTo(pageDiv);
-				moreLabel.append("and " + (plugins.length - 7) + " more...");
+				moreLabel.append("and " + (plugins.length - numVisible) + " more...");
 				moreLabel.click(function() {
 					moreLabel.hide();
 					moreDiv.show();
@@ -442,12 +453,12 @@ function HomeController(div) {
 			hFlex.append("<img style='height:175px; margin-right:20px;' src='img/key.png'>");
 			var vFlex = $("<div class='flex_vertical width_100'>").appendTo(hFlex);
 			vFlex.append("<div class='home_label'>Strong cryptography</div>");
-			vFlex.append("<div class='home_description'>Uses the latest window.crypto API available in browsers which provides access to a cryptographically secure random number generator. This allows generation of random values as seeds for your keys.</div>");
+			vFlex.append("<div class='home_description'>Uses the latest <a target='_blank' href='https://www.w3.org/TR/WebCryptoAPI/#dfn-GlobalCrypto'>window.crypto API</a> available in browsers which provides access to a cryptographically secure random number generator. This allows generation of random values as seeds for your keys.</div>");
 			
 			// download section
 			pageDiv.append("<div style='height: 70px'>");
-			pageDiv.append("<div class='home_label'>Download our 100% free and open-source software and run it offline</div>");
-			pageDiv.append("<div class='home_description'>Feel confident in the software you’re using. Inspect the source code and know that your money is secure. CryptoStorage is open-source, so the community can maintain it indefinitely.</div>")
+			pageDiv.append("<div class='home_label'>Download our 100% free and open source software and run it offline</div>");
+			pageDiv.append("<div class='home_description'>Feel confident in the software you’re using. Inspect the source code and know that your money is secure. CryptoStorage is open source, so the community can maintain it indefinitely.</div>")
 			var licenseDiv = $("<div class='flex_horizontal'>").appendTo(pageDiv);
 			var mitImg = $().appendTo(licenseDiv);
 			licenseDiv.append("<a target='_blank' href='./LICENSE.txt'><img src='img/mit.png' class='license_img'></a>");
@@ -479,13 +490,11 @@ function HomeController(div) {
 		});
 		
 		function onCurrencyClicked(plugin) {
-			if (!environmentFailure) UiUtils.openStorage(plugin.getName() + " Storage", {keyGenConfig: getKeyGenConfig(plugin), confirmExit: true, showRegenerate: true}); 
+			if (!environmentFailure) UiUtils.openStorageTab(plugin.getName() + " Storage", {keyGenConfig: getKeyGenConfig(plugin), confirmExit: true, showRegenerate: true}); 
 		}
 		
 		function getKeyGenConfig(plugin) {
 			var config = {};
-			config.passphraseEnabled = false;
-			config.splitEnabled = false;
 			config.numPieces = 1;
 			config.minPieces = null;
 			config.currencies = [];
@@ -550,13 +559,13 @@ function FaqController(div) {
 				{
 					id: "faq_what_is_cryptostorage",
 					getQuestion: function() { return "What is CryptoStorage?"; },
-					getAnswer: function() { return "<p>CryptoStorage is an open-source tool to generate offline storage for multiple cryptocurrencies.  This tool generates <a href='#faq_key_pair'>key pairs</a> in your device's browser which can store cryptocurrency without exposing private keys to an internet-connected device.  Generated key pairs can be easily printed and saved to digital files for long-term storage.</p>" +
+					getAnswer: function() { return "<p>CryptoStorage is an open source tool to generate offline storage for multiple cryptocurrencies.  This tool generates <a href='#faq_key_pair'>keypairs</a> in your device's browser which can store cryptocurrency without exposing private keys to an internet-connected device.  Generated keypairs can be easily printed and saved to digital files for long-term storage.</p>" +
 						"<p>This tool is security-focused.  Funds are never entrusted to a third party.  Private keys can be passphrase-protected and <a href='#faq_split_keys'>split into pieces</a> which can be geographically separated so funds are not accessible at any one location.  <a href='#faq_recommendations'>Recommendations</a> are automatically provided to improve the security of the tool's environment.</p>";
 					}
 				}, {
 					id: "faq_key_pair",
-					getQuestion: function() { return "What is a cryptocurrency key pair?" },
-					getAnswer: function() { return "<p>A cryptocurrency key pair is like an account that can send and receive cryptocurrency.  It is comprised of a public address and a private key.  For example, this is a Bitcoin key pair:</p>" +
+					getQuestion: function() { return "What is a cryptocurrency keypair?" },
+					getAnswer: function() { return "<p>A cryptocurrency keypair is like an account that can send and receive cryptocurrency.  It is comprised of a public address and a private key.  For example, this is a Bitcoin keypair:</p>" +
 						"<p><img class='sample_key_pair_img' src='img/key_pair.png'></p>" +
 						"<p>The public address is used to receive funds.  It can be publicly shared with anyone.</p>" + 
 						"<p>The private key authorizes received funds to be spent.  <span style='color:red'>The private key must remain private or all funds can be lost.</span></p>"; }
@@ -565,7 +574,7 @@ function FaqController(div) {
 					getQuestion: function() { return "How does CryptoStorage help keep my cryptocurrency safe and secure?"; },
 					getAnswer: function() { return "<p>First, this tool generates keys only in your device's browser.  Keys can be generated offline and are never shared with a third party by design.</p>" + 
 						"<p>Second, private keys can be protected with a passphrase.  The passphrase is required to decrypt the private keys in order to access funds.</p>" + 
-						"<p>Third, private keys can be split into separate pieces which must be combined to access funds.  For example, a Bitcoin key pair can be split into 3 pieces where 2 pieces must be combined to recover the private key.  These pieces can be geographically separated to prevent access at any one location.</p>" +
+						"<p>Third, private keys can be split into separate pieces which must be combined to access funds.  For example, a Bitcoin keypair can be split into 3 pieces where 2 pieces must be combined to recover the private key.  These pieces can be geographically separated to prevent access at any one location.</p>" +
 						"<p>Fourth, keys can printed and saved to digital files for long-term storage.</p>" +
 						"<p>Finally, this tool <a href='#faq_recommendations'>automatically detects and recommends</a> ways to improve the security of its environment.</p>"; }
 				}, {
@@ -577,8 +586,8 @@ function FaqController(div) {
 						var recommendationsList = $("<ol>").appendTo(answerDiv);
 						recommendationsList.append("<li><a href='#faq_download_verify'>Download and verify</a> then run the source code offline, not from the cryptostorage.com domain.</li>");
 						recommendationsList.append("<li>Run this tool on a device that is disconnected from the internet.  For maximum security, the device should never connect to the internet again after generating high-value storage.</li>");
-						recommendationsList.append("<li>Run this tool in an open-source browser like " + UiUtils.FIREFOX_LINK + " or " + UiUtils.CHROMIUM_LINK + ".</li>");
-						recommendationsList.append("<li>Run this tool on an open-source operating system like " + UiUtils.TAILS_LINK + ", " + UiUtils.DEBIAN_LINK + ", or " + UiUtils.RASPBIAN_LINK + ".</li>");
+						recommendationsList.append("<li>Run this tool in an open source browser like " + UiUtils.FIREFOX_LINK + " or " + UiUtils.CHROMIUM_LINK + ".</li>");
+						recommendationsList.append("<li>Run this tool on an open source operating system like " + UiUtils.TAILS_LINK + ", " + UiUtils.DEBIAN_LINK + ", or " + UiUtils.RASPBIAN_LINK + ".</li>");
 						return answerDiv;
 					}
 				}, {
@@ -591,11 +600,11 @@ function FaqController(div) {
 						var generateTransfer = $("<li><p>Transfer cryptostorage.com-<i>[version]</i>.zip to a secure computer using a flash drive.</p></li>").appendTo(generateList);
 						var generateTransferList = $("<ul>").appendTo(generateTransfer);
 						generateTransferList.append("<li>The computer should be disconnected from the internet.  For maximum security, the device should never connect to the internet again after generating cryptocurrency storage.</li>");
-						generateTransferList.append("<li>An open-source operating system is recommended like " + UiUtils.TAILS_LINK + ", " + UiUtils.DEBIAN_LINK + ", or " + UiUtils.RASPBIAN_LINK + ".</li>");
+						generateTransferList.append("<li>An open source operating system is recommended like " + UiUtils.TAILS_LINK + ", " + UiUtils.DEBIAN_LINK + ", or " + UiUtils.RASPBIAN_LINK + ".</li>");
 						generateList.append("<li>Unzip cryptostorage.com-<i>[version]</i>.zip</li>");
 						var generateBrowser = $("<li><p>Open index.html in the unzipped folder in a browser.</p></li>").appendTo(generateList);
 						var generateBrowserList = $("<ul>").appendTo(generateBrowser);
-						generateBrowserList.append("<li>An open-source browser is recommended like " + UiUtils.FIREFOX_LINK + " or " + UiUtils.CHROMIUM_LINK + ".</li>");
+						generateBrowserList.append("<li>An open source browser is recommended like " + UiUtils.FIREFOX_LINK + " or " + UiUtils.CHROMIUM_LINK + ".</li>");
 						var generateChecks = $("<li><p>Confirm that all environment checks pass.</p></li>").appendTo(generateList)
 						var generateChecksList = $("<ol>").appendTo(generateChecks);
 						generateChecksList.append("<li><p>Go to Generate New Keys from the homepage.</p></li>");
@@ -651,18 +660,18 @@ function FaqController(div) {
 				}, {
 					id: "faq_trust",
 					getQuestion: function() { return "How can I trust this tool?"; },
-					getAnswer: function() { return "<p>CryptoStorage is 100% open-source which means anyone can review the source code.</p>" +
+					getAnswer: function() { return "<p>Don't trust.  Verify.  CryptoStorage is 100% open source which means anyone can review the source code.</p>" +
 						"<p><a href='#faq_download_verify'>Downloading and verifying</a> the source code ensures you have a copy that has been publicly reviewed and has not been modified by an attacker.</p>"; }
 				}, {
 					id: "faq_trusted_third_party",
 					getQuestion: function() { return "Are my funds ever entrusted to a third party?"; },
-					getAnswer: function() { return "<p>No.  The public/private key pairs are generated only in your devices browser so they are never shared with a third party by design.</p>"; }
+					getAnswer: function() { return "<p>No.  The public/private keypairs are generated only in your devices browser so they are never shared with a third party by design.</p>"; }
 				}, {
 					id: "faq_split_keys",
 					getQuestion: function() { return "What does it mean to split private keys?"; },
 					getAnswer: function() { return "<p>Generated storage can be split into separate pieces where some of the pieces must be combined in order to access funds.</p>" +
 						"<p>This is useful for geographically splitting your cryptocurrency storage so that funds cannot be accessed at any one physical location without obtaining and combining multiple pieces.</p>" +
-						"<p>For example, 10 key pairs can be split into 3 pieces where 2 pieces must be combined to access funds.  Each piece will contain shares for all 10 key pairs.  No funds can be accessed from any of the pieces until 2 of the 3 pieces are combined.</p>" +
+						"<p>For example, 10 keypairs can be split into 3 pieces where 2 pieces must be combined to access funds.  Each piece will contain shares for all 10 keypairs.  No funds can be accessed from any of the pieces until 2 of the 3 pieces are combined.</p>" +
 						"<p>In this example, one might choose to keep one piece, put one in a bank, and give one to a trusted family member.</p>"; }
 				}, {
 					id: "faq_online_to_recover",
@@ -673,11 +682,20 @@ function FaqController(div) {
 					getQuestion: function() { return "Can I send funds using CryptoStorage?"; },
 					getAnswer: function() { return "<p>Not currently.  It is expected that users will send funds using wallet software of their choice after private keys have been recovered using this tool.</p>"; }
 				}, {
+					id: "faq_interoperable",
+					getQuestion: function() { return "Does CryptoStorage work with other wallet software?"; },
+					getAnswer: function() {
+						var answerDiv = $("<div>");
+						answerDiv.append("<p>All unencrypted keys generated with CryptoStorage will work with other wallet software and vice versa.</p>" +
+								"<p>However, there is currently no standardized way of encrypting or splitting cryptocurrency keys that works across all key types.  As a result, CryptoStorage uses its own conventions to encrypt and split keys which will not work with other tools unless they use the same conventions.  <b>A copy of this tool should be saved to recover keys in the future if using encryption or splitting.</b></p>");
+						return answerDiv;
+					}
+				}, {
 					id: "faq_contact",
 					getQuestion: function() { return "I still need help.  Who can I contact?"; },
 					getAnswer: function() { return "<p>For bug reports and feature requests, please submit an issue to <a href='https://github.com/cryptostorage/cryptostorage.com/issues'>https://github.com/cryptostorage/cryptostorage.com/issues</a>.</p>" +
 						"<p>For community discussion, please join the conversation on Reddit at <a href='https://reddit.com/r/cryptostorage'>https://reddit.com/r/cryptostorage</a>.</p>" +
-						"<p>For email support, please email <a href='mailto:support@cryptostorage.com'>support@cryptostorage.com</a>.  Emails are answered on a best-effort basis only.</p>" +
+						"<p>For email support, please email <a href='mailto:support@cryptostorage.com'>support@cryptostorage.com</a>.  Email is answered on a best-effort basis only.</p>" +
 						"<p><i>No one can recover lost keys or passwords for you.  Do not lose these or your funds will be lost.</i></p>"
 					}
 				}
@@ -866,6 +884,7 @@ function DonateController(div, appController) {
 			var plugins = AppUtils.getCryptoPlugins();
 			for (var i = 0; i < plugins.length; i++) {
 				var plugin = plugins[i];
+				if (!plugin.getDonationAddress()) continue;
 				donations.push({
 					currencyPlugin: plugin,
 					address: plugin.getDonationAddress(),
@@ -1081,10 +1100,12 @@ function FormController(div) {
 			var pageDiv = $("<div class='page_div'>").appendTo(div);
 			
 			// top links
-//			var formLinks = $("<div class='form_links_div'>").appendTo(pageDiv);
-//			var oneOfEachLink = $("<div class='form_link'>").appendTo(formLinks);
-//			oneOfEachLink.html("One of each");
-//			oneOfEachLink.click(function() { onOneOfEach(); });
+			if (AppUtils.DEV_MODE) {
+				var formLinks = $("<div class='form_links_div'>").appendTo(pageDiv);
+				var oneOfEachLink = $("<div class='form_link'>").appendTo(formLinks);
+				oneOfEachLink.html("One of each");
+				oneOfEachLink.click(function() { onOneOfEach(); });
+			}
 			
 			// currency inputs
 			currencyInputs = [];
@@ -1110,21 +1131,16 @@ function FormController(div) {
 					passphraseInputDiv.show();
 					passphraseInput.focus();
 				} else {
-					passphraseInput.get(0)._tippy.hide(0);
-					passphraseInput.val("");
-					passphraseInput.attr("type", "password");
-					showPassphraseCheckbox.prop('checked', false);
-					bip38Checkbox.prop('checked', false);
-					passphraseInputDiv.hide();
-					setPassphraseError(false);
+					resetPassphrase();
 				}
 			});
 			
 			// passphrase input
-			passphraseInputDiv = $("<div class='passphrase_input_div'>").appendTo(passphraseDiv);
+			passphraseInputDiv = $("<div class='passphrase_input_div flex_vertical flex_justify_start'>").appendTo(passphraseDiv);
+			renderInteroperabilityDisclaimer($("<div>").appendTo(passphraseInputDiv), "Passphrase encryption is not interoperable with other tools.");
 			var passphraseWarnDiv = $("<div class='passphrase_warn_div'>").appendTo(passphraseInputDiv);
 			passphraseWarnDiv.append("This passphrase is required to access funds later on.  <b>Do not lose it.</b>");
-			passphraseInputDiv.append("Passphrase");
+			passphraseInputDiv.append($("<div style='width:100%'>Passphrase</div>"));
 			passphraseInput = $("<input type='password' class='passphrase_input'>").appendTo(passphraseInputDiv);
 			passphraseInput.on("input", function(e) { setPassphraseError(false); });
 			
@@ -1144,12 +1160,12 @@ function FormController(div) {
 			});
 			
 			// passphrase config
-			var passphraseConfigDiv = $("<div class='passphrase_config_div'>").appendTo(passphraseInputDiv);
-			bip38CheckboxDiv = $("<div class='bip38_checkbox_div'>").appendTo(passphraseConfigDiv);
+			var passphraseConfigDiv = $("<div class='passphrase_config_div flex_horizontal flex_justify_start'>").appendTo(passphraseInputDiv);
+			bip38CheckboxDiv = $("<div class='bip38_checkbox_div flex_horizontal'>").appendTo(passphraseConfigDiv);
 			bip38Checkbox = $("<input type='checkbox' id='bip38_checkbox'>").appendTo(bip38CheckboxDiv);
 			var bip38CheckboxLabel = $("<label for='bip38_checkbox'>").appendTo(bip38CheckboxDiv);
 			bip38CheckboxLabel.html("Use BIP38 for Bitcoin and Bitcoin Cash");
-			var showPassphraseCheckboxDiv = $("<div class='show_passphrase_checkbox_div'>").appendTo(passphraseConfigDiv);
+			var showPassphraseCheckboxDiv = $("<div class='show_passphrase_checkbox_div flex_horizontal'>").appendTo(passphraseConfigDiv);
 			showPassphraseCheckbox = $("<input type='checkbox' id='show_passphrase'>").appendTo(showPassphraseCheckboxDiv);
 			var showPassphraseCheckboxLabel = $("<label for='show_passphrase'>").appendTo(showPassphraseCheckboxDiv);
 			showPassphraseCheckboxLabel.html("Show passphrase");
@@ -1201,7 +1217,7 @@ function FormController(div) {
 			var splitTooltip = $("<div>");
 			splitTooltip.append("Uses <a target='_blank' href='https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing'>Shamir's Secret Sharing</a> to split generated storage into separate pieces where some of the pieces must be combined in order to access funds.<br><br>");
 			splitTooltip.append("This is useful for geographically splitting your cryptocurrency storage so that funds cannot be accessed at any one physical location without obtaining and combining multiple pieces.<br><br>");
-			splitTooltip.append("For example, 10 key pairs can be split into 3 pieces where 2 pieces must be combined to access funds.  Each piece will contain shares for all 10 key pairs.  No funds can be accessed from any of the pieces until 2 of the 3 pieces are combined.");
+			splitTooltip.append("For example, 10 keypairs can be split into 3 pieces where 2 pieces must be combined to access funds.  Each piece will contain shares for all 10 keypairs.  No funds can be accessed from any of the pieces until 2 of the 3 pieces are combined.");
 			tippy(splitInfo.get(0), {
 				arrow: true,
 				html: splitTooltip.get(0),
@@ -1217,37 +1233,32 @@ function FormController(div) {
 			});
 			
 			// split input
-			splitInputDiv = $("<div class='split_input_div'>").appendTo(splitDiv);
-			var splitQr = $("<img class='split_qr' src='img/qr_code.png'>").appendTo(splitInputDiv);
-			var splitLines3 = $("<img class='split_lines_3' src='img/split_lines_3.png'>").appendTo(splitInputDiv);
-			var splitNumDiv = $("<div class='split_num_div'>").appendTo(splitInputDiv);
+			splitInputDiv = $("<div class='split_input_div flex_vertical flex_justify_start'>").appendTo(splitDiv);
+			renderInteroperabilityDisclaimer($("<div>").appendTo(splitInputDiv), "Split storage is not interoperable with other tools.");
+			var splitConfigDiv = $("<div class='flex_horizontal'>").appendTo(splitInputDiv);
+			var splitQr = $("<img class='split_qr' src='img/qr_code.png'>").appendTo(splitConfigDiv);
+			var splitLines3 = $("<img class='split_lines_3' src='img/split_lines_3.png'>").appendTo(splitConfigDiv);
+			var splitNumDiv = $("<div class='split_num_div flex_vertical flex_justify_start'>").appendTo(splitConfigDiv);
 			var splitNumLabelTop = $("<div class='split_num_label_top'>").appendTo(splitNumDiv);
 			splitNumLabelTop.html("Split Each Key Into");
 			numPiecesInput = $("<input type='tel' value='3' min='2'>").appendTo(splitNumDiv);
 			var splitNumLabelBottom = $("<div class='split_num_label_bottom'>").appendTo(splitNumDiv);
 			splitNumLabelBottom.html("Pieces");
-			var splitLines2 = $("<img class='split_lines_2' src='img/split_lines_2.png'>").appendTo(splitInputDiv);
-			var splitMinDiv = $("<div class='split_min_div'>").appendTo(splitInputDiv);
+			var splitLines2 = $("<img class='split_lines_2' src='img/split_lines_2.png'>").appendTo(splitConfigDiv);
+			var splitMinDiv = $("<div class='split_min_div flex_vertical flex_justify_start'>").appendTo(splitConfigDiv);
 			var splitMinLabelTop = $("<div class='split_min_label_top'>").appendTo(splitMinDiv);
 			splitMinLabelTop.html("Require");
 			minPiecesInput = $("<input type='tel' value='2' min='2'>").appendTo(splitMinDiv);
 			var splitMinLabelBottom = $("<div class='split_min_label_bottom'>").appendTo(splitMinDiv);
-			splitMinLabelBottom.html("To Recover");	
+			splitMinLabelBottom.html("To Recover");
 			numPiecesInput.on("input", function(e) { validateSplit(false); });
 			numPiecesInput.on("focusout", function(e) { validateSplit(true); });
 			minPiecesInput.on("input", function(e) { validateSplit(false); });
 			minPiecesInput.on("focusout", function(e) { validateSplit(true); });
 			
-			// apply default configuration
-			passphraseCheckbox.prop('checked', false);
-			passphraseInputDiv.hide();
-			showPassphraseCheckbox.prop('checked', false);
-			splitCheckbox.prop('checked', false);
-			splitInputDiv.hide();
-			
 			// add generate button
-			var generateDiv = $("<div class='form_generate_div'>").appendTo(pageDiv);
-			btnGenerate = $("<div class='dark_green_btn'>").appendTo(generateDiv);
+			var generateDiv = $("<div class='form_generate_div flex_horizontal'>").appendTo(pageDiv);
+			btnGenerate = $("<div class='dark_green_btn flex_horizontal'>").appendTo(generateDiv);
 			btnGenerate.append("Generate Keys");
 			
 			// start over
@@ -1261,8 +1272,8 @@ function FormController(div) {
 				updateGenerateButton();
 			});
 			
-			// add first currency
-			addCurrency();
+			// initialize state
+			that.startOver();
 			
 			// done rendering
 			onDone(div);
@@ -1280,13 +1291,10 @@ function FormController(div) {
 		}
 		currencyInputs = [];
 		addCurrency();
+		if (AppUtils.DEV_MODE) currencyInputs[0].setSelectedCurrency("BCH");
 		
 		// reset passphrase
-		passphraseCheckbox.prop('checked', false);
-		passphraseInputDiv.hide();
-		showPassphraseCheckbox.prop('checked', false);
-		passphraseInput.val("");
-		bip38Checkbox.prop('checked', false);
+		resetPassphrase();
 		
 		// reset split
 		splitCheckbox.prop('checked', false);
@@ -1301,18 +1309,16 @@ function FormController(div) {
 	// handle when generate button clicked
 	function onGenerate(onDone) {
 		validateForm(true);
-		if (!hasFormErrors()) UiUtils.openStorage("Export Storage", {keyGenConfig: getConfig(), confirmExit: true});
+		if (!hasFormErrors()) UiUtils.openStorageTab("Export Storage", {keyGenConfig: getKeyGenConfig(), confirmExit: true});
 		if (onDone) onDone();
 	}
 	
 	// get current form configuration
-	function getConfig() {
+	function getKeyGenConfig() {
 		var config = {};
-		config.passphraseEnabled = passphraseCheckbox.prop('checked');
-		config.passphrase = passphraseInput.val();
-		config.splitEnabled = splitCheckbox.prop('checked');
-		config.numPieces = config.splitEnabled ? parseFloat(numPiecesInput.val()) : 1;
-		config.minPieces = config.splitEnabled ? parseFloat(minPiecesInput.val()) : null;
+		config.passphrase = passphraseCheckbox.prop('checked') ? passphraseInput.val() : null;
+		config.numPieces = splitCheckbox.prop('checked') ? parseFloat(numPiecesInput.val()) : 1;
+		config.minPieces = splitCheckbox.prop('checked') ? parseFloat(minPiecesInput.val()) : null;
 		config.verifyEncryption = AppUtils.VERIFY_ENCRYPTION;
 		config.currencies = [];
 		for (var i = 0; i < currencyInputs.length; i++) {
@@ -1320,7 +1326,7 @@ function FormController(div) {
 			config.currencies.push({
 				ticker: currencyInput.getSelectedPlugin().getTicker(),
 				numKeys: currencyInput.getNumKeys(),
-				encryption: config.passphraseEnabled ? getEncryptionScheme(currencyInput) : null
+				encryption: passphraseCheckbox.prop('checked') ? getEncryptionScheme(currencyInput) : null
 			});
 		}
 		verifyConfig(config);
@@ -1329,7 +1335,7 @@ function FormController(div) {
 		function getEncryptionScheme(currencyInput) {
 			if (currencyInput.getSelectedPlugin().getTicker() === "BTC" && bip38Checkbox.prop('checked')) return AppUtils.EncryptionScheme.BIP38;
 			if (currencyInput.getSelectedPlugin().getTicker() === "BCH" && bip38Checkbox.prop('checked')) return AppUtils.EncryptionScheme.BIP38;
-			return AppUtils.EncryptionScheme.CRYPTOJS;
+			return currencyInput.getSelectedPlugin().getEncryptionSchemes()[0];
 		}
 		
 		function verifyConfig(config) {
@@ -1344,6 +1350,17 @@ function FormController(div) {
 	}
 	
 	// -------------------------------- PRIVATE ---------------------------------
+	
+	function renderInteroperabilityDisclaimer(div, msg) {
+		div.empty();
+		div.addClass("interoperability_disclaimer flex_horizontal");
+		$("<img class='interoperability_caution' src='img/caution_solid.png'>").appendTo(div);
+		var msgDiv = $("<div>").appendTo(div);
+		msg = "&nbsp;" + msg;
+		msgDiv.append(msg);
+		div.append("&nbsp;");
+		var readMoreLink = $("<a target='_blank' href='#faq_interoperable'>Read more</a>").appendTo(div);
+	}
 	
 	function addCurrency(defaultTicker) {
 		
@@ -1388,6 +1405,18 @@ function FormController(div) {
 		updateBip38Checkbox();
 	}
 	
+	function resetPassphrase() {
+		passphraseCheckbox.prop('checked', false);
+		passphraseInput.get(0)._tippy.hide(0);
+		passphraseInput.val("");
+		passphraseInput.attr("type", "password");
+		showPassphraseCheckbox.prop('checked', false);
+		bip38Checkbox.prop('checked', false);
+		passphraseInputDiv.hide();
+		setPassphraseError(false);
+		if (AppUtils.DEV_MODE) passphraseInput.val(AppUtils.DEV_MODE_PASSPHRASE);	// dev mode default passphrase
+	}
+	
 	function updateBip38Checkbox() {
 		
 		// determine if BTC is selected
@@ -1421,7 +1450,7 @@ function FormController(div) {
 	}
 	
 	function hasFormErrors() {
-		return formErrors.environment || formErrors.currencyInputs || formErrors.passphrase || formErrors.split;
+		return (formErrors.environment && !AppUtils.DEV_MODE) || formErrors.currencyInputs || formErrors.passphrase || formErrors.split;
 	}
 	
 	function validateForm(validateCurrencySelection) {
@@ -1488,7 +1517,7 @@ function FormController(div) {
 			var numPiecesError = false;
 			var numPieces = Number(numPiecesInput.val());
 			if (strictBlankAndRange) {
-				if (!numPiecesInput.val() || !isInt(numPieces) || numPieces < 2) {
+				if (!numPiecesInput.val() || !isInt(numPieces) || numPieces < 2 || numPieces > AppUtils.MAX_SHARES) {
 					numPiecesError = true;
 					formErrors.split = true;
 					numPiecesInput.addClass("form_input_error_div");
@@ -1508,7 +1537,7 @@ function FormController(div) {
 			// validate min pieces
 			var minPieces = Number(minPiecesInput.val());
 			if (strictBlankAndRange) {
-				if (!minPiecesInput.val() || !isInt(minPieces) || minPieces < 2 || (!numPiecesError && minPieces > numPieces)) {
+				if (!minPiecesInput.val() || !isInt(minPieces) || minPieces < 2 || (!numPiecesError && minPieces > numPieces) || minPieces > AppUtils.MAX_SHARES) {
 					formErrors.split = true;
 					minPiecesInput.addClass("form_input_error_div");
 				} else {
@@ -1717,7 +1746,7 @@ function FormController(div) {
 			
 			// create right div
 			var rightDiv = $("<div class='currency_input_right_div'>").appendTo(div);
-			rightDiv.append("Key pairs to generate&nbsp;&nbsp;");
+			rightDiv.append("Keypairs to generate&nbsp;&nbsp;");
 			numKeysInput = $("<input type='tel' value='1' min='1'>").appendTo(rightDiv);
 			numKeysInput.on("input", function(e) { validateNumKeys(true); });
 			numKeysInput.on("focusout", function(e) { validateNumKeys(false); });
@@ -1818,7 +1847,7 @@ function ImportFileController(div) {
 		importInputDiv = $("<div class='import_input_div'>").appendTo(div);
 		
 		// warning div
-		warningDiv = $("<div class='import_warning_div'>").appendTo(importInputDiv);
+		warningDiv = $("<div class='import_warning_div flex_horizontal'>").appendTo(importInputDiv);
 		warningDiv.hide();
 		
 		// all file importing
@@ -1829,16 +1858,16 @@ function ImportFileController(div) {
 		decryptionDiv.hide();
 		
 		// drag and drop div
-		var dragDropDiv = $("<div class='import_drag_drop'>").appendTo(fileInputDiv);
+		var dragDropDiv = $("<div class='import_drag_drop flex_horizontal'>").appendTo(fileInputDiv);
 		var dragDropImg = $("<img class='drag_drop_img' src='img/drag_and_drop.png'>").appendTo(dragDropDiv);
-		var dragDropText = $("<div class='drag_drop_text'>").appendTo(dragDropDiv);
+		var dragDropText = $("<div class='drag_drop_text flex_vertical flex_justify_start'>").appendTo(dragDropDiv);
 		var dragDropLabel = $("<div class='drag_drop_label'>").appendTo(dragDropText);
 		dragDropLabel.append("Drag and Drop Files To Import");
 		var dragDropBrowse = $("<div class='drag_drop_browse'>").appendTo(dragDropText);
 		dragDropBrowse.append("or click to browse");
 		
 		// register browse link with hidden input
-		inputFiles = $("<input type='file' multiple accept='.json,.zip'>").appendTo(dragDropDiv);
+		inputFiles = $("<input type='file' multiple accept='.json,.csv,.zip'>").appendTo(dragDropDiv);
 		inputFiles.change(function() { onFilesImported($(this).get(0).files); });
 		inputFiles.hide();
 		dragDropBrowse.click(function() {
@@ -1874,7 +1903,7 @@ function ImportFileController(div) {
 		warningDiv.hide();
 		warningDiv.empty();
 		if (str) {
-			if (!img) img = $("<img src='img/warning.png'>");
+			if (!img) img = $("<img src='img/caution.png'>");
 			warningDiv.append(img);
 			img.addClass("import_warning_div_icon");
 			warningDiv.append(str);
@@ -1936,7 +1965,7 @@ function ImportFileController(div) {
 			decryptionController = new DecryptionController(decryptionDiv, keys, function(warning) {
 				that.setWarning(warning);
 			}, function(decryptedKeys, decryptedPieces, decryptedPieceDivs) {
-				showStorage(pieces, decryptedKeys, decryptedPieces, decryptedPieceDivs);
+				showInlineStorage(pieces, decryptedKeys, decryptedPieces, decryptedPieceDivs);
 			});
 			
 			// render decryption controller
@@ -1950,15 +1979,15 @@ function ImportFileController(div) {
 				
 				// add control to view encrypted keys
 				addControl("view encrypted keys", function() {
-					UiUtils.openStorage("Encrypted Keys", {splitPieces: pieces.length > 1 ? pieces : null, keys: keys});
+					UiUtils.openStorageTab("Encrypted Keys", {keys: keys, splitPieces: pieces.length > 1 ? pieces : null});
 				});
 			});
 		} else {
-			showStorage(pieces, keys);
+			showInlineStorage(pieces, keys);
 		}
 	}
 	
-	function showStorage(importedPieces, keys, pieces, pieceDivs) {
+	function showInlineStorage(importedPieces, keys, pieces, pieceDivs) {
 		resetControls();
 		importInputDiv.hide();
 		importedStorageDiv.empty();
@@ -1977,7 +2006,7 @@ function ImportFileController(div) {
 		if (importedPieces.length > 1) {
 			var viewSplit = $("<div class='import_control_link'>").appendTo(successLinks);
 			viewSplit.append("view split pieces");
-			viewSplit.click(function() { UiUtils.openStorage("Imported Pieces", {pieces: importedPieces}); });
+			viewSplit.click(function() { UiUtils.openStorageTab("Imported Pieces", {pieces: importedPieces}); });
 		}
 		
 		// inline storage
@@ -2028,29 +2057,45 @@ function ImportFileController(div) {
 					}
 					else if (namedPieces.length === 0) {
 						if (isJsonFile(file)) that.setWarning("File '" + file.name + "' is not a valid json piece");
-						else if (isZipFile(file)) that.setWarning("Zip '" + file.name + "' does not contain any valid json pieces");
+						if (isCsvFile(file)) that.setWarning("File '" + file.name + "' is not a valid csv piece");
+						else if (isZipFile(file)) that.setWarning("Zip '" + file.name + "' does not contain any valid pieces");
 						else throw new Error("Unrecognized file type: " + file.type);
 					} else {
 						onNamedPieces(null, namedPieces);
 					}
 				});
 			}
-			if (isJsonFile(file)) reader.readAsText(file);
+			if (isJsonFile(file) || isCsvFile(file)) reader.readAsText(file);
 			else if (isZipFile(file)) reader.readAsArrayBuffer(file);
-			else that.setWarning("File is not a zip or json file");
+			else that.setWarning("File is not a json, csv, or zip file");
 		}
 		
 		function getNamedPiecesFromFile(file, data, onNamedPieces) {
+			
+			// handle json file
 			if (isJsonFile(file)) {
 				var piece;
 				try {
 					piece = JSON.parse(data);
+					var namedPiece = {name: file.name, piece: piece};
+					onNamedPieces(null, [namedPiece]);
 				} catch (err) {
 					onNamedPieces(Error("Could not parse JSON content from '" + file.name + "'"));
 				}
-				var namedPiece = {name: file.name, piece: piece};
-				onNamedPieces(null, [namedPiece]);
 			}
+			
+			// handle csv file
+			else if (isCsvFile(file)) {
+				try {
+					piece = AppUtils.csvToPiece(data);
+					var namedPiece = {name: file.name, piece: piece};
+					onNamedPieces(null, [namedPiece]);
+				} catch (err) {
+					onNamedPieces(Error("'" + file.name + "' is not a valid piece"));
+				}
+			}
+			
+			// handle zip file
 			else if (isZipFile(file)) {
 				AppUtils.zipToPieces(data, function(namedPieces) {
 					onNamedPieces(null, namedPieces);
@@ -2104,7 +2149,7 @@ function ImportFileController(div) {
 		
 		// add control to view pieces
 		addControl("view imported pieces", function() {
-			UiUtils.openStorage("Imported Storage", {pieces: pieces});
+			UiUtils.openStorageTab("Imported Storage", {pieces: pieces});
 		});
 		
 		// attempt to get keys
@@ -2250,7 +2295,7 @@ function ImportTextController(div, plugins) {
 		importInputDiv = $("<div class='import_input_div'>").appendTo(div);
 		
 		// warning div
-		warningDiv = $("<div class='import_warning_div'>").appendTo(importInputDiv);
+		warningDiv = $("<div class='import_warning_div flex_horizontal'>").appendTo(importInputDiv);
 		warningDiv.hide();
 		
 		// all text importing
@@ -2277,12 +2322,12 @@ function ImportTextController(div, plugins) {
 		
 		// text area
 		textArea = $("<textarea class='import_textarea'>").appendTo(textInputDiv);
-		textArea.attr("placeholder", "Enter a private key or split pieces of a private key");
+		textArea.attr("placeholder", "Enter private keys, split shares, csv, or json");
 		
 		// submit button
 		var submit = $("<div class='import_button'>").appendTo(textInputDiv);
 		submit.html("Submit");
-		submit.click(function() { submitPieces(); });
+		submit.click(function() { onSubmit(); });
 		
 		// imported pieces
 		importedPiecesDiv = $("<div class='import_imported_pieces'>").appendTo(textInputDiv);
@@ -2317,6 +2362,7 @@ function ImportTextController(div, plugins) {
 	}
 	
 	this.startOver = function() {
+		selectedPlugin = null;
 		setWarning("");
 		textArea.val("");
 		importedStorageDiv.hide();
@@ -2375,16 +2421,18 @@ function ImportTextController(div, plugins) {
 		}
 	}
 	
-	function onKeysImported(keys) {
+	function onKeysImported(pieces, keys) {
+		resetControls();
+		setWarning("");
 		keys = listify(keys);
 		assertTrue(keys.length > 0);
-		if (keys[0].isEncrypted()) {
+		if (keys[0].hasPrivateKey() && keys[0].isEncrypted()) {
 			
 			// create decryption controller and register callbacks
 			decryptionController = new DecryptionController(decryptionDiv, keys, function(warning) {
 				setWarning(warning);
-			}, function(decryptedKeys, pieces, pieceDivs) {
-				onKeysDecrypted(decryptedKeys, pieces, pieceDivs);
+			}, function(decryptedKeys, decryptedPieces, decryptedPieceDivs) {
+				showInlineStorage(pieces, decryptedKeys, decryptedPieces, decryptedPieceDivs);
 			});
 			
 			// render decryption controller
@@ -2397,16 +2445,16 @@ function ImportTextController(div, plugins) {
 				decryptionController.focus();
 				
 				// add control to view encrypted keys
-				addControl("view encrypted key", function() {
-					UiUtils.openStorage("Encrypted Key", {keys: keys});
+				addControl("view encrypted keys", function() {
+					UiUtils.openStorageTab("Encrypted Keys", {keys: keys, splitPieces: pieces.length > 1 ? pieces : null});
 				});
 			});
 		} else {
-			onKeysDecrypted(keys);
+			showInlineStorage(pieces, keys);
 		}
 	}
 	
-	function onKeysDecrypted(keys, pieces, pieceDivs) {
+	function showInlineStorage(importedPieces, keys, pieces, pieceDivs) {
 		resetControls();
 		importInputDiv.hide();
 		importedStorageDiv.empty();
@@ -2418,9 +2466,15 @@ function ImportTextController(div, plugins) {
 		successTitle.append($("<img class='import_success_checkmark' src='img/checkmark.png'>"));
 		successTitle.append("Imported Successfully");
 		var successLinks = $("<div class='flex_horizontal import_success_links'>").appendTo(successDiv);
+		if (importedPieces.length > 1) successLinks.append("<div class='import_success_checkmark'>");	// filler to center control links under title text
 		var startOver = $("<div class='import_control_link'>").appendTo(successLinks);
 		startOver.append("start over");
 		startOver.click(function() { that.startOver(); });
+		if (importedPieces.length > 1) {
+			var viewSplit = $("<div class='import_control_link'>").appendTo(successLinks);
+			viewSplit.append("view split pieces");
+			viewSplit.click(function() { UiUtils.openStorageTab("Imported Pieces", {pieces: importedPieces}); });
+		}
 		
 		// inline storage
 		var storageDiv = $("<div>").appendTo(importedStorageDiv);
@@ -2435,7 +2489,7 @@ function ImportTextController(div, plugins) {
 	function setWarning(str, img) {
 		warningDiv.empty();
 		if (str) {
-			if (!img) img = $("<img src='img/warning.png'>");
+			if (!img) img = $("<img src='img/caution.png'>");
 			warningDiv.append(img);
 			img.addClass("import_warning_div_icon");
 			warningDiv.append(str);
@@ -2448,133 +2502,127 @@ function ImportTextController(div, plugins) {
 	function removePieces() {
 		importedPieces = [];
 		lastKeys = undefined;
-		updatePieces();
+		processPieces();
 	}
 	
 	function removePiece(piece) {
 		for (var i = 0; i < importedPieces.length; i++) {
-			if (importedPieces[i] === piece) {
+			if (equals(importedPieces[i], piece)) {
 				importedPieces.splice(i, 1);
-				updatePieces();
+				processPieces();
 				return;
 			}
 		}
 		throw new Error("No piece imported: " + piece);
 	}
 	
-	function submitPieces() {
+	/**
+	 * Invoked when the submit button clicked.
+	 */
+	function onSubmit() {
 		
+		// init state
+		setWarning("");
 		resetControls();
 		
-		// get and clear text
-		var val = textArea.val();
-		textArea.val("");
-		
-		// check for unselected currency
-		if (!selectedPlugin) {
-			setWarning("No currency selected");
-			return;
-		}
+		// get text
+		var text = textArea.val().trim();
 		
 		// check for empty text
-		if (val.trim() === "") {
+		if (text === "") {
 			setWarning("No text entered");
 			return;
 		}
 		
-		// get lines
-		var lines = getLines(val);
-		
-		// get lines with content
-		var contentLines = [];
-		for (var i = 0; i < lines.length; i++) {
-			var line = lines[i];
-			if (line.trim() !== "") contentLines.push(line);
+		// get pieces from input text
+		try {
+			var piece = AppUtils.parsePieceFromText(text, selectedPlugin);
+		} catch (err) {
+			if (err.message.indexOf("Plugin required") !== -1) {
+				setWarning("No currency selected");
+				return;
+			}
+			throw err;
 		}
 		
-		// add pieces
-		updatePieces(contentLines);
+		// check if valid piece input
+		if (!piece) {
+			setWarning("Input text is not a private key or piece");
+			return;
+		}
+		
+		// check if piece can be added to imported pieces
+		var msg = getCompatibilityError(piece, importedPieces);
+		if (msg) {
+			setWarning(msg);
+			return;
+		}
+		
+		// assign pieceNum if not given
+		if (!piece.pieceNum) piece.pieceNum = getNextAvailablePieceNum(importedPieces);
+		
+		// accept piece into imported pieces
+		textArea.val("");
+		importedPieces.push(piece);
+		processPieces();
+		
+		function getNextAvailablePieceNum(pieces) {
+			var pieceNum = 1;
+			while (true) {
+				var found = false;
+				for (var i = 0; i < pieces.length; i++) {
+					if (pieces[i].pieceNum === pieceNum) {
+						found = true;
+						break;
+					} 
+				}
+				if (!found) return pieceNum;
+				pieceNum++;
+			}
+		}
+		
+		function getCompatibilityError(piece, pieces) {
+			
+			// check if piece already added
+			if (arrayContains(pieces, piece)) return "Piece already imported";
+			
+			// no issues adding private key
+			return null;
+		}
 	}
 	
-	function updatePieces(newPieces) {
+	/**
+	 * Reads the imported pieces.
+	 */
+	function processPieces() {
 		
-		// reset warning
+		// update UI
 		setWarning("");
-		
-		// interanl warning setter to track if warning is set
-		var warningSet = false;
-		function setWarningAux(str, icon) {
-			setWarning(str, icon);
-			warningSet = true;
-		}
-		
-		// scenarios:
-		// add private key, don't allow anything after
-		// add private keys, add first, don't allow anything after
-		// add piece, need additional, allow pieces, don't allow private key
-		// add pieces, check if key created, allow pieces, don't allow private key
-		
-		// check for existing private key
-		var key;
-		if (importedPieces.length === 1) {
-			try {
-				key = selectedPlugin.newKey(importedPieces[0]);
-			} catch (err) {
-				// nothing to do
-			}
-		}
-		
-		// add new pieces
-		if (newPieces) {
-			if (key) setWarningAux("Private key already added");
-			else {
-				for (var i = 0; i < newPieces.length; i++) {
-					var piece = newPieces[i];
-					if (arrayContains(importedPieces, piece)) {
-						setWarningAux("Piece already added");
-						continue;
-					}
-					if (key) setWarningAux("Private key alread added");
-					else {
-						try {
-							var thisKey = selectedPlugin.newKey(piece);
-							if (importedPieces.length > 0) setWarningAux("Cannot add private key to existing pieces");
-							else {
-								key = thisKey;
-								importedPieces.push(piece);
-							}
-						} catch (err) {
-							if (AppUtils.isPossibleSplitPiece(piece)) importedPieces.push(piece);
-							else setWarningAux("Invalid private key or piece");
-						}
-					}
-				}
-			}
-		}
-		
-		// check if pieces combine to make private key
-		if (!key && importedPieces.length > 0) {
-			try {
-				key = selectedPlugin.combine(importedPieces);
-			} catch (err) {
-				if (!warningSet) {
-					if (err.message.indexOf("additional piece") > -1) setWarning(err.message, $("<img src='img/files.png'>"));
-					else setWarning(err.message);
-				}
-			}
-		}
-		
-		// render pieces
 		renderImportedPieces(importedPieces);
 		
-		// selector only enabled if no pieces
-		setSelectorEnabled(importedPieces.length === 0);
+		// done if no pieces
+		if (importedPieces.length === 0) return;
 		
-		// handle if key exists
-		if (key) onKeysImported(key);
+		// add control to view pieces
+		addControl("view imported pieces", function() {
+			UiUtils.openStorageTab("Imported Storage", {pieces: importedPieces});
+		});
+		
+		// check if pieces combine to make private keys
+		try {
+			var keys = AppUtils.piecesToKeys(importedPieces);
+			onKeysImported(importedPieces, keys);
+		} catch (err) {
+			if (err.message.indexOf("additional piece") > -1) setWarning(err.message, $("<img src='img/files.png'>"));
+			else setWarning(err.message);
+		}
 	}
 	
 	function renderImportedPieces(pieces) {
+		
+		// selector enabled iff no pieces
+		setSelectorEnabled(pieces.length === 0 || !selectedPlugin);
+
 		importedPiecesDiv.empty();
 		if (pieces.length === 0) {
 			importedPiecesDiv.hide();
@@ -2591,7 +2639,9 @@ function ImportTextController(div, plugins) {
 		function getImportedPieceDiv(piece) {
 			var importedPieceDiv = $("<div class='import_text_imported_piece'>").appendTo(importedPiecesDiv);
 			var icon = $("<img src='img/file.png' class='import_imported_icon'>").appendTo(importedPieceDiv);
-			importedPieceDiv.append(AppUtils.getShortenedString(piece, MAX_PIECE_LENGTH));
+			assertTrue(piece.keys.length > 0);
+			var pieceLabel = piece.keys.length === 1 ? (piece.keys[0].wif ? piece.keys[0].wif : piece.keys[0].address) : "Imported piece" + (piece.pieceNum ? " " + piece.pieceNum : "");
+			importedPieceDiv.append(AppUtils.getShortenedString(pieceLabel, MAX_PIECE_LENGTH));
 			var trash = $("<img src='img/trash.png' class='import_imported_trash'>").appendTo(importedPieceDiv);
 			trash.click(function() { removePiece(piece); });
 			return importedPieceDiv;
@@ -2631,6 +2681,7 @@ function DecryptionController(div, encryptedKeys, onWarning, onKeysDecrypted) {
 		// passphrase input
 		inputDiv = $("<div>").appendTo(div);
 		passphraseInput = $("<input type='password' class='import_passphrase_input'>").appendTo(inputDiv)
+		if (AppUtils.DEV_MODE) passphraseInput.val(AppUtils.DEV_MODE_PASSPHRASE);
 		submitButton = $("<div class='import_button'>").appendTo(inputDiv);
 		submitButton.html("Submit");
 		submitButton.click(function() { onSubmit(); });
@@ -2718,7 +2769,7 @@ function DecryptionController(div, encryptedKeys, onWarning, onKeysDecrypted) {
 				
 				// render pieces
 				new PieceRenderer(pieces, null, null).render(function(percentDone) {
-					setProgress((decryptWeight + percentDone * renderWeight) / totalWeight, "Rendering...");
+					setProgress((decryptWeight + percentDone * renderWeight) / totalWeight, "Rendering");
 				}, function(err, pieceDivs) {
 					if (err) throw err;
 					onKeysDecrypted(decryptedKeys, pieces, pieceDivs);
@@ -2836,9 +2887,16 @@ function ExportController(div, window, config) {
 	var saveButton;
 	var printButton;
 	var savePublicButton;
+	var moreButton;
+	var moreButtonImg;
+	var moreDropdownContent;
 	var showPublicCheckbox;
 	var showPrivateCheckbox;
 	var showLogosCheckbox;
+	var cryptoCashCheckbox;
+	var cryptoCashCheckboxInfoImg;
+	var cryptoCashBackCheckboxSpan;
+	var cryptoCashBackCheckbox;
 	var paginator;
 	var piecesDiv;
 	var piecesLabel;
@@ -2846,9 +2904,8 @@ function ExportController(div, window, config) {
 	var regenerateDiv;
 	var publicAvailable;
 	var privateAvailable;
-	var quickGenerate = isQuickGenerate();	// only show notice bar and key pair when completely done if quick generate
-	var saveBlob;														// cached blob to save when Save All clicked
-	var saveName;														// cached name to save when Save All clicked
+	var quickGenerate = isQuickGenerate();	// only show notice bar and keypair when completely done if quick generate
+	var exportFiles = {};										// cached file blobs and names for saving
 	var controlState;												// tracks enable/disable state of control elements
 	
 	// confirm exit if storage not saved or printed
@@ -2879,19 +2936,99 @@ function ExportController(div, window, config) {
 		savePublicButton = $("<div class='export_button'>").appendTo(exportButtons);
 		savePublicButton.html("Save Public Addresses");
 		
+		// more dropdown
+		var moreDropdown = $("<div class='dropdown'>").appendTo(exportButtons);
+		moreButton = $("<div class='export_button dropbtn flex_vertical'>").appendTo(moreDropdown);
+		moreButtonImg = $("<img src='img/share.png' class='export_more_img'>");
+		moreButton.append(moreButtonImg);
+		moreDropdownContent = $("<div id='dropdownContent' class='dropdown-content'>").appendTo(moreDropdown);
+		var saveCsvBtn = $("<div class='export_button dropdown_export_button'>").appendTo(moreDropdownContent);
+		saveCsvBtn.append("Export to CSV");
+		saveCsvBtn.click(function() { saveCsv(); });
+		var saveTxtBtn = $("<div class='export_button dropdown_export_button'>").appendTo(moreDropdownContent);
+		saveTxtBtn.append("Export to TXT");
+		saveTxtBtn.click(function() { saveTxt(); });
+		window.onclick = function(event) { // close the dropdown if user clicks outside
+		  if (!event.target.matches('.dropbtn') && !event.target.matches('.export_more_img')) {
+		  	moreDropdownContent.removeClass('show');
+		  }
+		}
+		
+		// sort pieces and pieceDivs by piece number
+		sortPieces();
+		
+		// get paginator source if split pieces
+		var paginatorSource = getPaginatorSource(config.keyGenConfig, config.pieces);
+		
 		// export checkboxes
 		var exportCheckboxes = $("<div class='export_checkboxes flex_horizontal'>").appendTo(exportControls);
-		showPublicCheckbox = $("<input type='checkbox' class='export_checkbox' id='showPublicCheckbox'>").appendTo(exportCheckboxes);
-		var showPublicCheckboxLabel = $("<label class='export_checkbox_label' for='showPublicCheckbox'>").appendTo(exportCheckboxes);
-		showPublicCheckboxLabel.html("Include public addresses");
-		exportCheckboxes.append("&nbsp;&nbsp;&nbsp;");
-		showPrivateCheckbox = $("<input type='checkbox' class='export_checkbox' id='showPrivateCheckbox'>").appendTo(exportCheckboxes);
-		var showPrivateCheckboxLabel = $("<label class='export_checkbox_label' for='showPrivateCheckbox'>").appendTo(exportCheckboxes);
-		showPrivateCheckboxLabel.html("Include private keys");
-		exportCheckboxes.append("&nbsp;&nbsp;&nbsp;");
-		showLogosCheckbox = $("<input type='checkbox' class='export_checkbox' id='showLogosCheckbox'>").appendTo(exportCheckboxes);
-		var showLogosCheckboxLabel = $("<label class='export_checkbox_label' for='showLogosCheckbox'>").appendTo(exportCheckboxes);
-		showLogosCheckboxLabel.html("Include logos");
+		var exportCheckbox = getControlCheckbox("Include public addresses");
+		exportCheckboxes.append(exportCheckbox[0]);
+		showPublicCheckbox = exportCheckbox[1];
+		exportCheckbox = getControlCheckbox("Include private keys");
+		exportCheckboxes.append(exportCheckbox[0]);
+		showPrivateCheckbox = exportCheckbox[1];
+		exportCheckbox = getControlCheckbox("Include logos");
+		exportCheckboxes.append(exportCheckbox[0]);
+		showLogosCheckbox = exportCheckbox[1];
+		exportCheckbox = getControlCheckbox("Crypto-cash", "Formats keypairs to be printed and cut out.  Perfect for tipping in real life.");
+		exportCheckboxes.append(exportCheckbox[0]);
+		cryptoCashCheckbox = exportCheckbox[1];
+		cryptoCashCheckboxInfoImg = exportCheckbox[3];
+		if (!isCryptoCashEnabled()) exportCheckbox[0].hide();
+		exportCheckbox = getControlCheckbox("Instructions on back");
+		exportCheckboxes.append(exportCheckbox[0]);
+		cryptoCashBackCheckboxSpan = exportCheckbox[0];
+		cryptoCashBackCheckbox = exportCheckbox[1];
+		if (!isCryptoCashEnabled()) cryptoCashBackCheckboxSpan.hide();
+		
+		// creates a control checkbox with the given label
+		function getControlCheckbox(label, info) {
+			var span = $("<span class='export_checkbox_span flex_horizontal'>");
+			var uuid = uuidv4();
+			var checkbox = $("<input type='checkbox' class='export_checkbox' id='" + uuid + "'>").appendTo(span);
+			var checkboxLabel = $("<label class='export_checkbox_label flex_horizontal' for='" + uuid + "'>").appendTo(span);
+			checkboxLabel.append(label);
+			
+			// info tooltip
+			var infoImg;
+			if (info) {
+				infoImg = $("<img src='img/information_white.png' class='information_img'>").appendTo(span);
+				var tooltip = $("<div>");
+				tooltip.append(info);
+				tippy(infoImg.get(0), {
+					arrow: true,
+					html: tooltip.get(0),
+					placement: 'bottom',
+					theme: 'translucent',
+					trigger: "mouseenter",
+					multiple: 'false',
+					maxWidth: UiUtils.INFO_TOOLTIP_MAX_WIDTH,
+					distance: 20,
+					arrowTransform: 'scaleX(1.25) scaleY(2.5) translateY(2px)',
+					offset: '0, 0'
+				});
+			}
+			
+			return [span, checkbox, label, infoImg];
+		}
+		
+		// determines if crypto-cash option is enabled
+		function isCryptoCashEnabled() {
+			if (paginatorSource) {
+				return false;																													// disable if split
+			} else if (config.pieces) {
+				if (!isInitialized(config.pieces[0].keys[0].wif)) return false;				// disable if no private key
+				return !isInitialized(config.pieces[0].keys[0].encryption);						// enable if unencrypted
+			} else if (config.keys) {
+				if (!config.keys[0].hasPrivateKey()) return false;										// disable if no private key
+				return !config.keys[0].isEncrypted();																	// enable if unencrypted
+			} else if (config.keyGenConfig) {
+				return !isInitialized(config.keyGenConfig.currencies[0].encryption);	// enable if unencrypted
+			} else {
+				throw new Error("One of config.pieces, config.keys, or config.keyGenConfig required");
+			}
+		}
 		
 		// apply default checkbox state
 		publicAvailable = (!config.keys && !config.pieces) || isPublicAvailable(config.keys, config.pieces);
@@ -2909,12 +3046,10 @@ function ExportController(div, window, config) {
 			showPrivateCheckbox.attr("disabled", "disabled");
 		}
 		showLogosCheckbox.prop('checked', true);
+		cryptoCashCheckbox.prop('checked', false);
+		cryptoCashBackCheckbox.prop('checked', true);
 		
-		// sort pieces and pieceDivs by piece number
-		sortPieces();
-		
-		// piece selection
-		var paginatorSource = getPaginatorSource(config.keyGenConfig, config.pieces);
+		// paginator
 		if (paginatorSource) {
 			paginator = $("<div id='paginator' class='flex_horizontal'>").appendTo(exportControls);
 			$("#paginator", exportHeader).pagination({
@@ -2935,7 +3070,7 @@ function ExportController(div, window, config) {
 			var viewImported = $("<div class='import_control_link'>").appendTo(exportControls);
 			viewImported.html("view split pieces");
 			viewImported.click(function() {
-				UiUtils.openStorage("Imported Pieces", {pieces: config.splitPieces});
+				UiUtils.openStorageTab("Imported Pieces", {pieces: config.splitPieces});
 			});
 		}
 		
@@ -2958,7 +3093,7 @@ function ExportController(div, window, config) {
 		this.render = function(onDone) {
 			
 			// load export dependencies
-			LOADER.load(AppUtils.getExportDependencies(), function(err) {
+			LOADER.load(AppUtils.getDynamicExportDependencies(), function(err) {
 				if (err) throw err;
 
 				// notices
@@ -2977,10 +3112,10 @@ function ExportController(div, window, config) {
 				
 				function renderAux() {
 					
-					// first release warning
-					var alphaDiv = $("<div class='alpha_warning flex_horizontal'>").appendTo(div);
-					alphaDiv.append($("<img class='alpha_icon' src='img/warning.png'>"));
-					alphaDiv.append("<span style='text-align:center;'>First Release: Do not trust with significant amounts until community reviewed.");
+					// beta warning
+					var betaDiv = $("<div class='beta_warning flex_horizontal'>").appendTo(div);
+					betaDiv.append($("<img class='beta_icon' src='img/caution.png'>"));
+					betaDiv.append("<span style='text-align:center;'>Beta Version: Do not use with significant amounts until community-reviewed.");
 					
 					// progress bar
 					progressDiv = $("<div class='export_progress_div'>").appendTo(div);
@@ -2995,6 +3130,8 @@ function ExportController(div, window, config) {
 					showPublicCheckbox.click(function() { update(); });
 					showPrivateCheckbox.click(function() { update(); });
 					showLogosCheckbox.click(function() { update(); });
+					cryptoCashCheckbox.click(function() { update(); });
+					cryptoCashBackCheckbox.click(function() { update(); });
 					
 					// done rendering if not quick generate
 					if (onDone && !quickGenerate) onDone(div);
@@ -3005,11 +3142,11 @@ function ExportController(div, window, config) {
 						// regenerate button
 						if (config.showRegenerate) {
 							regenerateDiv = $("<div class='export_regenerate_div'>").appendTo(div);
-							btnRegenerate = $("<div class='dark_green_btn'>").appendTo(regenerateDiv);
+							btnRegenerate = $("<div class='dark_green_btn flex_horizontal'>").appendTo(regenerateDiv);
 							btnRegenerate.append("Regenerate");
 							var refreshImg = $("<img src='img/refresh.png' class='refresh_img rotate2'>").appendTo(btnRegenerate);
 							btnRegenerate.click(function() {
-								if (confirm("Discard key pair and create a new one?")) {
+								if (confirm("Discard keypair and create a new one?")) {
 									
 									// rotate refresh icon
 									refreshImg.data("deg", refreshImg.data("deg") ? refreshImg.data("deg") + 180 : 180);
@@ -3089,25 +3226,19 @@ function ExportController(div, window, config) {
 		return {
 			showPublic: showPublicCheckbox.prop('checked'),
 			showPrivate: showPrivateCheckbox.prop('checked'),
-			showLogos: showLogosCheckbox.prop('checked')
+			showLogos: showLogosCheckbox.prop('checked'),
+			spaceBetween: cryptoCashCheckbox.prop('checked'),
+			infoBack: cryptoCashBackCheckbox.prop('checked')
 		};
 	}
 	
-	function printAll() {
-		if (!controlState.printAll) return;
-		if (getExportConfig().showPrivate || confirm("Funds CANNOT be recovered from this printed document because the private keys are not included.\n\nContinue?")) {
-			saved = true;
-			window.print();
-		}
-	}
-	
 	/**
-	 * Caches the file and name for Save All.
+	 * Caches file content and names for saving.
 	 * 
 	 * @param pieces are the pieces to transform and save per the configuration
 	 * @param onDone() is invoked when ready
 	 */
-	function prepareSaveAll(pieces, onDone) {
+	function prepareExportFiles(pieces, onDone) {
 		assertInitialized(pieces);
 		assertTrue(pieces.length > 0);
 		
@@ -3118,29 +3249,58 @@ function ExportController(div, window, config) {
 			transformedPieces.push(AppUtils.transformPiece(pieces[i], config));
 		}
 		
-		// generate json or zip for save button
-		saveName = "cryptostorage_" + AppUtils.getCommonTicker(pieces[0]).toLowerCase() + "_" + AppUtils.getTimestamp();
+		// generate exports
+		var name = "cryptostorage_" + AppUtils.getCommonTicker(pieces[0]).toLowerCase() + "_" + AppUtils.getTimestamp();
 		if (pieces.length === 1) {
-			saveBlob = new Blob([AppUtils.pieceToJson(transformedPieces[0])], {type: "text/plain;charset=utf-8"});
-			saveName = saveName + ".json";
+			exportFiles.saveAllBlob = new Blob([AppUtils.pieceToJson(transformedPieces[0])], {type: "text/plain;charset=utf-8"});
+			exportFiles.saveAllName = name + ".json";
+			exportFiles.csvBlob = new Blob([AppUtils.pieceToCsv(transformedPieces[0])], {type: "text/plain;charset=utf-8"});
+			exportFiles.csvName = name + ".csv";
+			exportFiles.txtBlob = new Blob([AppUtils.pieceToTxt(transformedPieces[0])], {type: "text/plain;charset=utf-8"});
+			exportFiles.txtName = name + ".txt";
 			onDone();
 		} else {
-			AppUtils.piecesToZip(transformedPieces, function(blob) {
-				saveBlob = blob;
-				saveName = saveName + ".zip";
-				onDone();
+			
+			// json zip
+			AppUtils.piecesToZip(transformedPieces, "json", function(blob) {
+				exportFiles.saveAllBlob = blob;
+				exportFiles.saveAllName = name + ".zip";
+				
+				// csv zip
+				AppUtils.piecesToZip(transformedPieces, "csv", function(blob) {
+					exportFiles.csvBlob = blob;
+					exportFiles.csvName = name + "_csv.zip";
+					
+					// txt zip
+					AppUtils.piecesToZip(transformedPieces, "txt", function(blob) {
+						exportFiles.txtBlob = blob;
+						exportFiles.txtName = name + "_txt.zip";
+						onDone();
+					});
+				});
 			});
 		}
 	}
 	
 	/**
-	 * Saves all pieces.
+	 * Save all.
 	 */
 	function saveAll() {
 		if (!controlState.saveAll) return;
 		if (getExportConfig().showPrivate || confirm("Funds CANNOT be recovered from this saved file because the private keys are not included.\n\nContinue?")) {
 			saved = true;
-			saveAs(saveBlob, saveName);
+			saveAs(exportFiles.saveAllBlob, exportFiles.saveAllName);
+		}
+	}
+	
+	/**
+	 * Print all.
+	 */
+	function printAll() {
+		if (!controlState.printAll) return;
+		if (getExportConfig().showPrivate || confirm("Funds CANNOT be recovered from this printed document because the private keys are not included.\n\nContinue?")) {
+			saved = true;
+			window.print();
 		}
 	}
 	
@@ -3156,6 +3316,28 @@ function ExportController(div, window, config) {
 	}
 	
 	/**
+	 * Save CSV.
+	 */
+	function saveCsv() {
+		if (!controlState.more) return;
+		if (getExportConfig().showPrivate || confirm("Funds CANNOT be recovered from this saved file because the private keys are not included.\n\nContinue?")) {
+			saved = true;
+			saveAs(exportFiles.csvBlob, exportFiles.csvName);
+		}
+	}
+	
+	/**
+	 * Save TXT.
+	 */
+	function saveTxt() {
+		if (!controlState.more) return;
+		if (getExportConfig().showPrivate || confirm("Funds CANNOT be recovered from this saved file because the private keys are not included.\n\nContinue?")) {
+			saved = true;
+			saveAs(exportFiles.txtBlob, exportFiles.txtName);
+		}
+	}
+	
+	/**
 	 * Returns a control state that is completely enabled/disabled depending on the given boolean.
 	 * 
 	 * @param bool specifies if all states are enabled or disabled
@@ -3165,6 +3347,7 @@ function ExportController(div, window, config) {
 			saveAll: bool,
 			printAll: bool,
 			savePublic: bool,
+			more: bool,
 			checkboxes: bool,
 			paginator: bool
 		};
@@ -3227,6 +3410,21 @@ function ExportController(div, window, config) {
 			}
 		}
 		
+		// more button
+		if (isInitialized(state.more)) {
+			moreButton.unbind("click");
+			if (state.more) {
+				moreButton.addClass("export_button dropbtn");
+				moreButton.removeClass("export_button_disabled");
+				moreButton.click(function(e) { moreDropdownContent.toggleClass("show"); });
+				moreButtonImg.removeClass('export_more_img_disabled');
+			} else {
+				moreButton.addClass("export_button_disabled dropbtn");
+				moreButton.removeClass("export_button");
+				moreButtonImg.addClass('export_more_img_disabled');
+			}
+		}
+		
 		// paginator
 		if (isInitialized(state.paginator)) {
 			if (paginator) {
@@ -3254,10 +3452,20 @@ function ExportController(div, window, config) {
 					showPrivateCheckbox.attr('disabled', 'disabled');
 				}
 				showLogosCheckbox.removeAttr('disabled');
+				cryptoCashCheckbox.removeAttr('disabled');
+				cryptoCashCheckboxInfoImg.css("opacity", "1");		// manually set info opacity
+				if (cryptoCashCheckbox.prop('checked')) {
+					cryptoCashBackCheckboxSpan.show();
+				} else {
+					cryptoCashBackCheckboxSpan.hide();
+				}
 			} else {
 				showPublicCheckbox.attr('disabled', 'disabled');
 				showPrivateCheckbox.attr('disabled', 'disabled');
 				showLogosCheckbox.attr('disabled', 'disabled');
+				cryptoCashCheckbox.attr('disabled', 'disabled');
+				cryptoCashCheckboxInfoImg.css("opacity", ".5");	// manually set info opacity
+				cryptoCashBackCheckboxSpan.hide();
 			}
 		}
 	}
@@ -3288,7 +3496,7 @@ function ExportController(div, window, config) {
 			//setVisiblePiece(config.pieceDivs, paginator ? paginator.pagination('getSelectedPageNum') - 1 : 0);
 			setPieceDivs(config.pieceDivs);
 			makePieceDivsCopyable(config.pieceDivs);
-			prepareSaveAll(config.pieces, function() {
+			prepareExportFiles(config.pieces, function() {
 				setControlsEnabled(true);
 				if (onDone) onDone();
 			});
@@ -3307,7 +3515,7 @@ function ExportController(div, window, config) {
 				state.printAll = false;
 				state.paginator = false;
 				setControlsEnabled(state);
-				prepareSaveAll(config.pieces, function() {
+				prepareExportFiles(config.pieces, function() {
 					if (lastRenderer) lastRenderer.cancel();
 					lastRenderer = new PieceRenderer(config.pieces, config.pieceDivs, getExportConfig());
 					lastRenderer.render(null, function(err, pieceDivs) {
@@ -3325,6 +3533,7 @@ function ExportController(div, window, config) {
 			// otherwise generate keys from config
 			else {
 				assertInitialized(config.keyGenConfig);
+				config.keyGenConfig.renderConfig = getExportConfig();	// render configuration
 				if (!quickGenerate) setControlsEnabled(false);
 				AppUtils.generateKeys(config.keyGenConfig, function(percent, label) {
 					progressBar.set(percent);
@@ -3380,7 +3589,9 @@ function ExportController(div, window, config) {
 			if (keyGenConfig.currencies[i].encryption === AppUtils.EncryptionScheme.BIP38) return false;	// BIP38 is slow
 			numPairs += keyGenConfig.currencies[i].numKeys;
 		}
-		numPairs *= keyGenConfig.splitEnabled ? keyGenConfig.numPieces : 1;
+		assertNumber(keyGenConfig.numPieces);
+		assertTrue(keyGenConfig.numPieces >= 1);
+		numPairs *= keyGenConfig.numPieces;
 		return numPairs <= 2;
 	}
 }
@@ -3595,11 +3806,11 @@ function NoticeController(div, config) {
 			// interpret environment code and state
 			switch (check.code) {
 				case AppUtils.EnvironmentCode.BROWSER:
-					if (check.state === "pass") div.append("Browser is open-source (" + info.browser.name + ")");
+					if (check.state === "pass") div.append("Browser is open source (" + info.browser.name + ")");
 					else {
 						var content = $("<div>").appendTo(div);
 						if (check.state === "fail") content.append("<div class='notice_bar_center_major'>Browser is not supported (" + info.browser.name + " " + info.browser.version + ")</div>");
-						else content.append("<div class='notice_bar_center_major'>Browser is not open-source (" + info.browser.name + ")</div>");
+						else content.append("<div class='notice_bar_center_major'>Browser is not open source (" + info.browser.name + ")</div>");
 						content.append("<div class='notice_bar_center_minor'>Recommended browsers: " + UiUtils.FIREFOX_LINK + " or " + UiUtils.CHROMIUM_LINK + "</div>");
 					}
 					break;
@@ -3627,10 +3838,10 @@ function NoticeController(div, config) {
 					}
 					break;
 				case AppUtils.EnvironmentCode.OPERATING_SYSTEM:
-					if (check.state === "pass") div.append("Operating system is open-source (" + info.os.name + ")");
+					if (check.state === "pass") div.append("Operating system is open source (" + info.os.name + ")");
 					else {
 						var content = $("<div>").appendTo(div);
-						content.append("<div class='notice_bar_center_major'>Operating system is not open-source (" + info.os.name + ")</div>");
+						content.append("<div class='notice_bar_center_major'>Operating system is not open source (" + info.os.name + ")</div>");
 						content.append("<div class='notice_bar_center_minor'>Recommended operating systems: " + UiUtils.TAILS_LINK + ", " + UiUtils.DEBIAN_LINK + ", or " + UiUtils.RASPBIAN_LINK + ".</li>");
 					}
 					break;

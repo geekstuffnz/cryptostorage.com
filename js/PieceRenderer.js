@@ -104,17 +104,26 @@ function PieceRenderer(pieces, pieceDivs, config) {
 		
 		// merge configs
 		config = Object.assign({}, PieceRenderer.defaultConfig, config);
+		
+		// compute pairs per page
+		var pairsPerPage = config.spaceBetween ? 6 : 7;
 
 		// setup pages and collect functions to render keys
 		var pageDiv;
 		var funcs = [];
+		var tickers;
 		for (var i = 0; i < piece.keys.length; i++) {
 			
-			// render new page
-			if (i % config.pairsPerPage === 0) {
-				if (i > 0) pieceDiv.append($("<div class='piece_page_spacer'>"));
+			// add new page
+			if (i % pairsPerPage === 0) {
+				if (i > 0) {
+					pieceDiv.append($("<div>"));
+					tickers = [];
+					for (var j = 0; j < pairsPerPage; j++) tickers.push(piece.keys[i - (pairsPerPage - j)].ticker);
+					if (config.spaceBetween && config.infoBack) pieceDiv.append(getSweepInstructionsPage(tickers));
+				}
 				pageDiv = $("<div class='piece_page_div'>").appendTo(pieceDiv);
-				if (piece.pieceNum || config.showLogos) {
+				if (!config.spaceBetween && (piece.pieceNum || config.showLogos)) {
 					var headerDiv = $("<div class='piece_page_header_div'>").appendTo(pageDiv);
 					headerDiv.append($("<div class='piece_page_header_left'>"));
 					if (config.showLogos) headerDiv.append($("<img class='piece_page_header_logo' src='img/cryptostorage_export.png'>"));
@@ -123,12 +132,20 @@ function PieceRenderer(pieces, pieceDivs, config) {
 				}
 			}
 			
-			// collect function to render key pair
+			// collect function to render keypair
 			var placeholderDiv = $("<div class='key_div'>").appendTo(pageDiv);
+			if (config.spaceBetween) placeholderDiv.addClass("key_div_spaced");
 			funcs.push(renderKeyPairFunc(placeholderDiv, piece, i, config));
 		}
 		
-		// callback function to render key pair
+		// add cryptostoarge logos
+		var numPairsLastPage = piece.keys.length % pairsPerPage;
+		if (!numPairsLastPage) numPairsLastPage = pairsPerPage;
+		tickers = [];
+		for (var i = 0; i < numPairsLastPage; i++) tickers.push(piece.keys[piece.keys.length - (numPairsLastPage - i)].ticker);
+		if (config.spaceBetween && config.infoBack) pieceDiv.append(getSweepInstructionsPage(tickers));
+		
+		// callback function to render keypair
 		function renderKeyPairFunc(placeholderDiv, piece, index, config) {
 			return function(onDone) {
 				if (isCancelled) return;
@@ -160,11 +177,11 @@ function PieceRenderer(pieces, pieceDivs, config) {
 		});
 		
 		/**
-		 * Renders a single key pair.
+		 * Renders a single keypair.
 		 * 
-		 * @param div is the div to render to
-		 * @param piece is the piece containing the key pair to render
-		 * @param index is the index of the key pair within the piece
+		 * @param div is the div to render to (optional)
+		 * @param piece is the piece containing the keypair to render
+		 * @param index is the index of the keypair within the piece
 		 * @param config is the render configuration
 		 * @param onDone is invoked when rendering is done
 		 */
@@ -172,17 +189,19 @@ function PieceRenderer(pieces, pieceDivs, config) {
 			if (isCancelled) return;
 			
 			var pieceKey = piece.keys[index];
+			var plugin = AppUtils.getCryptoPlugin(pieceKey.ticker);
 			var isSplit = isInitialized(piece.pieceNum);
+			var addressApplicable = pieceKey.address !== AppUtils.NA;
 			
 			// content to render
 			var title = piece.keys.length > 1 ? "#" + (index + 1) : "";
 			var leftLabel = "\u25C4 Public Address";
 			var leftValue = (!pieceKey.address && pieceKey.encryption) ? "(decrypt to view)" : config.showPublic ? pieceKey.address : "(not shown)";
-			var leftCopyable = config.showPublic && pieceKey.address;
-			var rightLabel = "Private Key" + (pieceKey.wif && config.showPrivate ? (isSplit ? " (split)" : pieceKey.encryption ? " (encrypted)" : " (unencrypted)") : "") + " \u25ba";
+			var leftCopyable = config.showPublic && pieceKey.address && addressApplicable;
+			var rightLabel = plugin.getPrivateLabel();
+			rightLabel += " " + (pieceKey.wif && config.showPrivate ? (isSplit ? "(split)" : pieceKey.encryption ? "(encrypted)" : "(unencrypted)") : "") + " \u25ba";
 			var rightValue = pieceKey.wif && config.showPrivate ? pieceKey.wif : "(not shown)";
 			var rightCopyable = pieceKey.wif && config.showPrivate;
-			var plugin = AppUtils.getCryptoPlugin(pieceKey.ticker);
 			var currencyLogo = plugin.getLogo();
 			currencyLogo.attr("width", "100%");
 			currencyLogo.attr("height", "100%");
@@ -191,6 +210,7 @@ function PieceRenderer(pieces, pieceDivs, config) {
 			// div setup
 			if (!div) div = $("<div>");
 			div.addClass("key_div");
+			if (config.spaceBetween) div.addClass("key_div_spaced");
 			
 			// left qr code
 			var keyDivLeft = $("<div class='key_div_left'>").appendTo(div);
@@ -198,15 +218,18 @@ function PieceRenderer(pieces, pieceDivs, config) {
 			// title
 			var keyDivCenter = $("<div class='key_div_center'>").appendTo(div);
 			var titleDiv = $("<div class='key_div_center_title'>").appendTo(keyDivCenter);
+			if (addressApplicable) titleDiv.css("position", "absolute");
 			titleDiv.html(title);
 			
 			// left label and value
-			var keyDivLeftLabel = $("<div class='key_div_left_label'>").appendTo(keyDivCenter);
-			keyDivLeftLabel.html(leftLabel);
-			var keyDivLeftValue = $("<div class='key_div_left_value'>").appendTo(keyDivCenter);
-			if (!hasWhitespace(leftValue)) keyDivLeftValue.css("word-break", "break-all");
-			keyDivLeftValue.html(leftValue);
-			if (leftCopyable) keyDivLeftValue.addClass("copyable");
+			if (addressApplicable) {
+				var keyDivLeftLabel = $("<div class='key_div_left_label'>").appendTo(keyDivCenter);
+				keyDivLeftLabel.html(leftLabel);
+				var keyDivLeftValue = $("<div class='key_div_left_value'>").appendTo(keyDivCenter);
+				if (!hasWhitespace(leftValue)) keyDivLeftValue.css("word-break", "break-all");
+				keyDivLeftValue.html(leftValue);
+				if (leftCopyable) keyDivLeftValue.addClass("copyable");
+			}
 			
 			// center currency
 			var keyDivCurrency = $("<div class='key_div_currency'>").appendTo(keyDivCenter);
@@ -221,17 +244,20 @@ function PieceRenderer(pieces, pieceDivs, config) {
 			var keyDivRightLabel = $("<div class='key_div_right_label'>").appendTo(keyDivCenter);
 			keyDivRightLabel.html(rightLabel);
 			var keyDivRightValue = $("<div class='key_div_right_value'>").appendTo(keyDivCenter);
+			if (!addressApplicable) keyDivRightValue.css("margin-left", "-90px");
 			if (!hasWhitespace(rightValue)) keyDivRightValue.css("word-break", "break-all");
 			keyDivRightValue.html(rightValue);
 			if (rightCopyable) keyDivRightValue.addClass("copyable");
 			
 			// collapse spacing for long keys
-			if (leftValue.length > 71) {
-				keyDivCurrency.css("margin-top", "-15px");
-			}
-			if (rightValue.length > 150) {
-				keyDivCurrency.css("margin-top", "-10px");
-				keyDivRightLabel.css("margin-top", "-15px");
+			if (addressApplicable) {
+				if (leftValue.length > 71) {
+					keyDivCurrency.css("margin-top", "-15px");
+				}
+				if (rightValue.length > 140) {
+					keyDivCurrency.css("margin-top", "-10px");
+					keyDivRightLabel.css("margin-top", "-15px");
+				}
 			}
 			
 			// right qr code
@@ -246,8 +272,10 @@ function PieceRenderer(pieces, pieceDivs, config) {
 					addPrivateQr();
 				});
 			} else {
-				var omitted = $("<div class='key_div_qr_omitted flex_horizontal'>").appendTo(keyDivLeft);
-				omitted.append($("<img src='img/restricted.png' class='key_div_qr_omitted_img'>"));
+				if (addressApplicable) {
+					var omitted = $("<div class='key_div_qr_omitted flex_horizontal'>").appendTo(keyDivLeft);
+					omitted.append($("<img src='img/restricted.png' class='key_div_qr_omitted_img'>"));
+				}
 				addPrivateQr();
 			}
 			function addPrivateQr() {
@@ -275,12 +303,47 @@ function PieceRenderer(pieces, pieceDivs, config) {
 				return qr_config;
 			}
 		}
+		
+		function getSweepInstructionsPage(tickers) {
+			assertTrue(config.spaceBetween);
+			assertArray(tickers);
+			assertTrue(tickers.length > 0);
+			var pageDiv = $("<div class='piece_page_div'>");
+			for (var i = 0; i < tickers.length; i++) pageDiv.append(getSweepInstructionsDiv(tickers[i]));
+			return pageDiv;
+			
+			function getSweepInstructionsDiv(ticker) {
+				assertInitialized(ticker);
+				var div = $("<div>");
+				div.addClass("key_div key_div_spaced flex_horizontal");
+				
+				// instructions
+				var instructionsDiv = $("<div class='cryptocash_instructions'>").appendTo(div);
+				instructionsDiv.append("<b>To claim funds:</b>");
+				var instructionsList = $("<ol>").appendTo(instructionsDiv);
+				if (ticker === "BCH" || ticker === "BTC") {
+					instructionsList.append("<li><b>Download</b> wallet software of your choice (e.g. Bitcoin.com wallet).</li>");
+					instructionsList.append("<li><b>Sweep</b> the private key on the reverse side using your wallet.<br>Bitcoin.com wallet: Scan QR code > Sweep paper wallet > Sweep</li>");
+					instructionsList.append("<li><b>All done.</b> Funds are now claimed and accessible in your wallet.</li>");
+				} else {
+					instructionsList.append("<li><b>Download</b> wallet software of your choice (e.g. Jaxx).</li>");
+					instructionsList.append("<li><b>Sweep</b> the private key on the reverse side using your wallet.<br>Jaxx: Menu > Tools > Transfer paper wallet > follow on-screen instructions</li>");
+					instructionsList.append("<li><b>All done.</b> Funds are now claimed and accessible in your wallet.</li>");
+				}
+				
+				// branding
+				var brandingDiv = $("<div class='cryptocash_branding flex_vertical'>").appendTo(div);
+				brandingDiv.append("<span><i>Generated by</i></span>");
+				brandingDiv.append($("<img class='cryptocash_branding_logo' src='img/cryptostorage_export.png'>"));
+				brandingDiv.append("<span style='font-size: 15px;'>https://cryptostorage.com</span>");
+				return div;
+			}
+		}
 	}
 }
 
 // default configuration
 PieceRenderer.defaultConfig = {
-		pairsPerPage: 7,
 		showPublic: true,
 		showPrivate: true,
 		showLogos: true,
@@ -288,7 +351,9 @@ PieceRenderer.defaultConfig = {
 		qrVersion: null,
 		qrErrorCorrectionLevel: 'H',
 		qrScale: 4,
-		qrPadding: 5		// spacing in pixels
+		qrPadding: 5,		// spacing in pixels
+		spaceBetween: false,
+		infoBack: true
 };
 
 // compute render weight

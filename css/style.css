@@ -65,7 +65,7 @@ body {
 }
 
 .flex_justify_start {
-	-ms-flex-pack: flex-start;
+	-ms-flex-pack: start;
 	-webkit-justify-content: flex-start;
 	justify-content: flex-start;
 }
@@ -202,7 +202,7 @@ body {
 	color: white;
 	text-align: left;
 	margin-left: 15px;
-	max-width: 1200px;
+	max-width: 1400px;
 }
 
 .cta_div {
@@ -379,6 +379,7 @@ body {
 .currency_row_label_minor {
 	font-size: 20px;
 	text-align: center;
+	width: 100%;
 }
 
 .home_more_label {
@@ -636,14 +637,6 @@ input[type='checkbox'][disabled] +label {
 }
 
 .passphrase_input_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-flex-direction: column;
-	-moz-flex-direction: column;
-	-ms-flex-direction: column;
-	flex-direction: column;
 	margin: 20px 20px 0px 20px;
 }
 
@@ -651,7 +644,7 @@ input[type='checkbox'][disabled] +label {
 	color: red;
 	width: 100%;
 	text-align: center;
-	margin-bottom: 15px;
+	margin-bottom: 10px;
 }
 
 .passphrase_input {
@@ -662,50 +655,25 @@ input[type='checkbox'][disabled] +label {
 }
 
 .passphrase_config_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
+	width: 100%;
 	padding: 7px 0px 7px 0px;
 }
 
 .bip38_checkbox_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
 }
 
 .show_passphrase_checkbox_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
 	margin-left: auto;
 }
 
 .split_input_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
-	-webkit-justify-content: center; -ms-flex-pack : center;
-	justify-content : center;
 	margin: 20px 20px 0px 20px;
-	-ms-flex-pack: center;
-	justify-content: center;
+}
+
+.split_warn_div {
+	width: 100%;
+	text-align: center;
+	margin-bottom: 15px;
 }
 
 .split_qr {
@@ -721,17 +689,6 @@ input[type='checkbox'][disabled] +label {
 }
 
 .split_num_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-flex-direction: column;
-	-moz-flex-direction: column;
-	-ms-flex-direction: column;
-	flex-direction: column;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
 	margin: 10px;
 	max-width: 115px;
 }
@@ -755,17 +712,6 @@ input[type='checkbox'][disabled] +label {
 }
 
 .split_min_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-flex-direction: column;
-	-moz-flex-direction: column;
-	-ms-flex-direction: column;
-	flex-direction: column;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
 	margin: 10px;
 	width: 115px;
 }
@@ -781,38 +727,16 @@ input[type='checkbox'][disabled] +label {
 }
 
 .form_generate_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
-	-webkit-justify-content: center; -ms-flex-pack : center;
-	justify-content : center;
 	width: 100%;
-	-ms-flex-pack: center;
-	justify-content: center;
 }
 
 .dark_green_btn {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
-	-webkit-justify-content: center; -ms-flex-pack : center;
-	justify-content : center;
 	height: 70px;
 	min-width: 225px;
 	padding: 20px;
 	background-color: rgb(76, 213, 67);
 	color: white;
 	font-size:24px;
-	-ms-flex-pack: center;
-	justify-content: center;
 	-webkit-user-select: none;
 	-moz-user-select: none;
 	-ms-user-select: none;
@@ -988,23 +912,12 @@ input[type='checkbox'][disabled] +label {
 }
 
 .import_warning_div {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
-	-webkit-justify-content: center; -ms-flex-pack : center;
-	justify-content : center;
 	padding: 8px;
 	margin-bottom: 15px;
 	text-align: center;
 	background-color: rgb(247, 185, 43);
 	border: 2.5px solid black;
 	font-size: 24px;
-	-ms-flex-pack: center;
-	justify-content: center;
 	word-break: break-word;
 }
 
@@ -1015,20 +928,9 @@ input[type='checkbox'][disabled] +label {
 }
 
 .import_drag_drop {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
-	-webkit-justify-content: center; -ms-flex-pack : center;
-	justify-content : center;
 	background-color: white;
 	padding: 30px;
 	border: 2.5px solid black;
-	-ms-flex-pack: center;
-	justify-content: center;
 }
 
 .inner_outline {
@@ -1043,17 +945,7 @@ input[type='checkbox'][disabled] +label {
 }
 
 .drag_drop_text {
-	display: -webkit-flex;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: flex;
-	-webkit-flex-direction: column;
-	-moz-flex-direction: column;
-	-ms-flex-direction: column;
-	flex-direction: column;
-	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center;
+
 }
 
 .drag_drop_label {
@@ -1278,19 +1170,21 @@ input[type='checkbox'][disabled] +label {
 	padding: 12px;
 	margin-top: 2px;	/* fix mobile safari border showing */
 	padding: 20px;
+	max-width: 875px;
 }
 
 .export_buttons {
-	-ms-flex-pack: center;
-	justify-content: center;
 	margin-top: 0px;
+	align-items: stretch;
+	height: 53px;
+	line-height: 50px;
 }
 
 .export_button {
 	background-color: white;
 	color: black;
 	margin: 0 10px 0 10px;
-	padding: 5px 20px 5px 20px;
+	padding: 0px 20px 0px 20px;
 	border: 2.5px solid black;
 	font-size: 28px;
 	font-weight: bold;
@@ -1314,7 +1208,7 @@ input[type='checkbox'][disabled] +label {
 	background-color: white;
 	color: grey;
 	margin: 0 10px 0 10px;
-	padding: 5px 20px 5px 20px;
+	padding: 0px 20px 0px 20px;
 	border: 2.5px solid black;
 	font-size: 28px;
 	font-weight: bold;
@@ -1326,6 +1220,16 @@ input[type='checkbox'][disabled] +label {
 
 .export_checkboxes {
 	margin-top: 15px;
+	flex-wrap: wrap;
+}
+
+.export_checkbox_span {
+	white-space: nowrap;
+	margin-left: 15px;
+}
+
+.export_checkbox_span:first-child {
+	margin-left: 0px;
 }
 
 .export_checkbox {
@@ -1337,6 +1241,7 @@ input[type='checkbox'][disabled] +label {
 .export_checkbox_label {
 	color: white;
 	font-size: 24px;
+	white-space: nowrap;
 	-webkit-user-select: none;
 	-moz-user-select: none;
 	-ms-user-select: none;
@@ -1446,6 +1351,16 @@ input[type='checkbox'][disabled] +label {
 	border-bottom: 2px solid green;
 }
 
+.key_div_spaced {
+	border-bottom: 2px solid;
+	border-color: green;
+	margin-bottom: 34px;
+}
+
+.key_div_spaced:last-child {
+	margin-bottom: 0px;
+}
+
 .key_div_qr {
 	width: 90px;
 	height: 90px;
@@ -1473,6 +1388,7 @@ input[type='checkbox'][disabled] +label {
 	-webkit-justify-content: center;
 	-ms-flex-pack: center;
 	justify-content: center;
+	width:90px;
 }
 
 .key_div_center {
@@ -1493,7 +1409,6 @@ input[type='checkbox'][disabled] +label {
 
 .key_div_center_title {
 	font-size: 13px;
-	position: absolute;
 	left: 0;
 	right: 0;
 	text-align: center;
@@ -1547,7 +1462,7 @@ input[type='checkbox'][disabled] +label {
 }
 
 .key_div_right_value {
-	padding-left: 5px;
+	margin-left: 5px;
 	font-size: 13px;
 	text-align: right;
 	font-family: monospace;
@@ -1608,7 +1523,7 @@ input[type='checkbox'][disabled] +label {
 	.export_content_div {
 		display: unset;
 	}
-	.alpha_warning {
+	.beta_warning {
 		display: none;
 	}
 	.export_progress_div {
@@ -1642,6 +1557,44 @@ input[type='checkbox'][disabled] +label {
 	.export_regenerate_div {
 		display: none;
 	}
+}
+
+.cryptocash_instructions {
+	flex: 1;
+	margin-left: 10px;
+}
+
+.cryptocash_instructions, .cryptocash_instructions * {
+	font-size: 14px;
+}
+
+.cryptocash_instructions ol {
+	padding-left: 19px;
+}
+
+.cryptocash_instructions li {
+	padding-left: 8px;
+	margin-top: 2px;
+}
+
+.cryptocash_branding {
+	margin-right: 25px;
+}
+
+.cryptocash_branding, .cryptocash_branding * {
+	font-size: 14px;
+}
+
+.cryptocash_branding * {
+	margin-top: 3px;
+}
+
+.cryptocash_branding * :first-child {
+	margin-top: 0px;
+}
+
+.cryptocash_branding_logo {
+	width: 175px;
 }
 
 .hidden {
@@ -1823,7 +1776,7 @@ input[type='checkbox'][disabled] +label {
 	width: 100%;
 }
 
-.alpha_warning {
+.beta_warning {
 	background-color: orange;
 	padding: 5px 10px 5px 10px;
 	border-radius: 10px;
@@ -1832,12 +1785,79 @@ input[type='checkbox'][disabled] +label {
 	width: unset;
 }
 
-.alpha_warning * {
+.beta_warning * {
 	font-size:18px;
 }
 
-.alpha_icon {
+.beta_icon {
 	width: 30px;
 	height: 30px;
 	margin-right: 3px;
 }
+
+.interoperability_disclaimer {
+	width: unset;
+	font-size: 22px;
+	margin-bottom: 15px;
+}
+
+.interoperability_disclaimer * {
+	font-size:16px;
+}
+
+.interoperability_caution {
+	width: 20px;
+	height: 20px;
+}
+
+/* --- Export more dropdown from W3 --- */
+
+.dropdown {
+    height: 100%;
+    float: right;
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f1f1f1;
+    min-width: 160px;
+    overflow: auto;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    right: 0;
+    z-index: 1;
+}
+
+.dropdown_export_button:first-child {
+	border-top: 2.5px solid black;
+}
+
+.dropdown_export_button {
+	padding: 0px 10px 0px 10px;
+	border-style: solid;
+    border-width: 0px 2.5px 2.5px 2.5px;
+    font-weight: normal;
+    font-size: 23px;
+    margin: 0;
+    text-decoration: none;
+    display: block;
+}
+
+.dropbtn {
+	height: 100%;
+	padding: 0px 10px 0px 10px;
+	margin: 0 10px 0 10px;
+}
+
+.export_more_img {
+	width:40px;
+	margin: -5px 0px 0px 4px;
+}
+
+.export_more_img_disabled {
+	opacity: .5;
+}
+
+.show {display:block;}
